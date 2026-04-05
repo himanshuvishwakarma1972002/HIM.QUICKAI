@@ -22,7 +22,7 @@ const App = () => {
           <Route path= 'generate-images' element={<GenerateImages />}/>
           <Route path= 'remove-background' element={<RemoveBackground />}/>
           <Route path= 'remove-object' element={<RemoveObject />}/>
-          <Route path= 'review-resime' element={<ReviewResime />}/>
+          <Route path='review-resume' element={<ReviewResime />}/>
           <Route path= 'community' element={<Commnity />}/>
          
         </Route>
