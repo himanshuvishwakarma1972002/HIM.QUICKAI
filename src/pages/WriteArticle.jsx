@@ -3,6 +3,12 @@ import React, { useState } from 'react'
 
 const WriteArticle = () => {
 
+  const articleLength = [
+    { length: 800, text: 'Short (500-800 words)' },
+    { length: 1200, text: 'Medium (800-1200 words)' },
+    { length: 1600, text: 'Long (1200+ words)' }
+  ]
+
   const [selectedLength, setSelectedLength] = useState(800)
   const [input, setInput] = useState('')
 
@@ -10,11 +16,7 @@ const WriteArticle = () => {
     e.preventDefault()
   }
 
-  const articleLength = [
-    { length: 800, text: 'Short (500-800 words)' },
-    { length: 1200, text: 'Medium (800-1200 words)' },
-    { length: 1600, text: 'Long (1200+ words)' }
-  ]
+
 
   return (
     <div className='h-full overflow-y-scroll p-6 flex items-start flex-wrap gap-4 text-slate-700'>
