@@ -1,64 +1,127 @@
 import React, { useState } from 'react'
-import { EraserIcon, Sparkles } from 'lucide-react'
-import e from 'cors'
+import { EraserIcon, Sparkles, UploadCloud, X } from 'lucide-react'
 
 const RemoveBackground = () => {
 
-  const [input, setInput] = useState('')
+  const [image, setImage] = useState(null)
+  const [preview, setPreview] = useState(null)
 
   const onSubmitHandler = (e) => {
     e.preventDefault()
-    console.log(input, selectedCategory)
+    console.log(image)
+  }
+
+  const handleImageUpload = (e) => {
+    const file = e.target.files[0]
+    if (file) {
+      setImage(file)
+      setPreview(URL.createObjectURL(file))
+    }
+  }
+
+  const removeImage = () => {
+    if (preview) URL.revokeObjectURL(preview)
+    setImage(null)
+    setPreview(null)
   }
 
   return (
-<div className='h-full overflow-y-scroll p-6 flex items-start flex-wrap gap-4 text-slate-700'>
+    <div className='h-full overflow-y-scroll p-6 flex items-start flex-wrap gap-6 bg-gray-50 text-slate-700'>
       
       {/* Left column */}
       <form 
         onSubmit={onSubmitHandler}
-        className='w-full max-w-lg p-5 bg-white rounded-lg border border-gray-200 space-y-4'
+        className='w-full max-w-lg p-6 bg-white rounded-xl border border-gray-200 space-y-5 shadow-sm'
       >
 
         {/* Header */}
         <div className='flex items-center gap-3'>
-          <Sparkles className='w-6 text-[#FF4938]'/>
-          <h1 className='text-xl font-semibold'>Background Removal</h1>
+          <Sparkles className='w-5 text-[#FF4938]'/>
+          <h1 className='text-lg font-semibold'>Background Removal</h1>
         </div>
 
-        {/* Keyword */}
+        {/* ✅ Upload Box */}
         <div>
-          <p className='text-sm font-medium'>Upload image</p>
-          <input onChange={(e)=>setInput(e.target.files[0])} type="file" accept='image/*' className='w-full p-2 px-3 mt-2 outline-none text-sm rounded-md border border-gray-300 text-gray-600' required/>
-        </div>
+          <p className='text-sm font-medium mb-2'>Upload Image</p>
 
-        <p className='text-xs text-gray-500 font-light mt-1'>Supports JPG, PNG, and other image formats</p>
-        
+          <label
+            htmlFor="bgUpload"
+            className='relative flex items-center justify-center w-full h-32 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-[#FF4938] transition bg-gray-100 overflow-hidden'
+          >
+            {preview ? (
+              <>
+                <img
+                  src={preview}
+                  alt="preview"
+                  className='h-full w-full object-contain'
+                />
+
+                {/* ❌ Remove Button */}
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault()
+                    removeImage()
+                  }}
+                  className='absolute top-2 right-2 z-10 bg-white/90 hover:bg-white p-1.5 rounded-full shadow'
+                >
+                  <X className='w-4 h-4 text-red-500'/>
+                </button>
+              </>
+            ) : (
+              <div className='flex flex-col items-center justify-center text-gray-400'>
+                <UploadCloud className='w-7 h-7 mb-1'/>
+                <p className='text-xs'>Click to Upload</p>
+              </div>
+            )}
+
+            <input
+              id="bgUpload"
+              type="file"
+              accept="image/*"
+              onChange={handleImageUpload}
+              className="hidden"
+              required
+            />
+          </label>
+
+          <p className='text-xs text-gray-500 mt-2'>
+            Supports JPG, PNG and other formats
+          </p>
+        </div>
 
         {/* Submit */}
         <button
           type="submit"
-          className='w-full mt-4 bg-[#F6AB41] text-white py-2 rounded-md hover:bg-[#FF4938] transition flex items-center justify-center gap-2'
+          className='w-full bg-gradient-to-r from-[#F6AB41] to-[#FF4938] text-white py-2 rounded-md hover:opacity-90 transition flex items-center justify-center gap-2'
         >
           <EraserIcon className='w-4 h-4'/>
-            Remove Background
+          Remove Background
         </button>
 
       </form>
 
       {/* Right column */}
-      <div className='w-full max-w-lg p-4 bg-white rounded-lg flex flex-col border border-gray-200 min-h-96'>
+      <div className='w-full max-w-lg p-6 bg-white rounded-xl border border-gray-200 min-h-96 flex flex-col'>
         
         <div className='flex items-center gap-3'>
           <EraserIcon className='w-5 h-5 text-[#FF4938]'/>
-          <h1 className='text-xl font-semibold'>Processed Image</h1>
+          <h1 className='text-lg font-semibold'>Processed Image</h1>
         </div>
 
         <div className='flex-1 flex justify-center items-center'>
-          <div className='text-sm flex flex-col items-center gap-5 text-gray-400 text-center'>
-            <EraserIcon className='w-9 h-9'/>
-            <p>Upload an image and click "Remove Background" to get started</p>
-          </div>
+          {preview ? (
+            <img
+              src={preview}
+              alt="result"
+              className='max-h-72 object-contain'
+            />
+          ) : (
+            <div className='text-sm flex flex-col items-center gap-4 text-gray-400 text-center'>
+              <EraserIcon className='w-10 h-10'/>
+              <p>Upload an image and click "Remove Background"</p>
+            </div>
+          )}
         </div>
 
       </div>
