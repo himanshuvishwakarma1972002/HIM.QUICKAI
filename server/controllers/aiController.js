@@ -6,7 +6,7 @@ import { response } from "express";
 import { v2 as cloudinary} from "cloudinary"
 import axios from "axios";
 import fs from 'fs';
-import pdf from "pdf-parse";
+import { PDFParse } from "pdf-parse";
 import FormData from "form-data";
 
 
@@ -230,7 +230,9 @@ export const resumeReview = async (req, res) => {
         }
 
         const dataBuffer = fs.readFileSync(resume.path)
-        const pdfData = await pdf(dataBuffer)
+        const parser = new PDFParse({ data: dataBuffer })
+        const pdfData = await parser.getText()
+        await parser.destroy()
 
         const prompt = `Review the following resume and provide constructive feedback on its strengths, weakness, and areas for improvement. Resume Content:\n\n${pdfData.text}`
 
