@@ -3,6 +3,7 @@ import { Edit, Sparkles } from 'lucide-react'
 import axios from 'axios'
 import toast from 'react-hot-toast'
 import { useAuth } from '@clerk/react'
+import Markdown from 'react-markdown'
 
 axios.defaults.baseURL = import.meta.env.VITE_BASE_URL;
 
@@ -119,18 +120,21 @@ const WriteArticle = () => {
           <h1 className='text-xl font-semibold'>Generated Article</h1>
         </div>
 
-        <div className='flex-1 flex justify-center items-center'>
-          {content ? (
-            <p className='text-sm whitespace-pre-line text-left p-2'>
-              {content}
-            </p>
-          ) : (
-            <div className='text-sm flex flex-col items-center gap-5 text-gray-400 text-center'>
-              <Edit className='w-9 h-9' />
-              <p>Enter a topic and click "Generate Article"</p>
+        {!content ? (
+          <div className='flex-1 flex justify-center items-center'>
+           <div className='text-sm flesx flex-col items-center gap-5 text-gray-400'>
+            <Edit className='w-9 h-9' />
+            <p>Enter a topic and click "Generate Article"</p> 
+           </div>
+          </div>
+        ) : (
+          <div className='mt-3 h-full overflow-y-scroll text-sm text-slate-600'>
+          <div className='reset-tw'>
+              <Markdown>{content}</Markdown>
             </div>
-          )}
-        </div>
+          </div>
+        )}
+
 
       </div>
 
