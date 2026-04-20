@@ -4,10 +4,11 @@ import { v2 as cloudinary } from "cloudinary";
 import axios from "axios";
 import fs from "fs";
 import FormData from "form-data";
-//import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import { createRequire } from "module";
 import { clerkClient } from "@clerk/express";
 import OpenAI from "openai";
+
 
 
 const AI = new OpenAI({
@@ -64,27 +65,31 @@ export const generateArticle = async (req, res) => {
 // ================== BLOG TITLE ==================
 export const generateBlogTitle = async (req, res) => {
   try {
-    const { prompt } = req.body;
+    const { prompt, category } = req.body;
 
-    const model = getModel();
+    const fullPrompt = `Generate exactly 8 catchy blog titles for "${prompt}" in ${category} category.
+Each title must be on a new line.
+Do not include any introduction or extra text.`;
 
-    const result = await model.generateContent({
-      contents: [
+    const response = await AI.chat.completions.create({
+      model: "gemini-3-flash-preview",
+      messages: [
         {
           role: "user",
-          parts: [{ text: `Generate 5 blog titles for: ${prompt}` }],
+          content: fullPrompt,
         },
       ],
+      temperature: 0.7,
+      max_tokens: 200,
     });
 
-    const content = result.response.text();
+    const content = response.choices[0].message.content;
 
     res.json({ success: true, content });
 
   } catch (error) {
     console.log("BLOG ERROR:", error.message);
-
-    res.json({ success: false, message: "Failed to generate titles" });
+    res.json({ success: false, message: error.message });
   }
 };
 
@@ -164,7 +169,7 @@ export const resumeReview = async (req, res) => {
     const buffer = fs.readFileSync(req.file.path);
     const data = await pdfParse(buffer);
 
-    const model = getModel();
+   // const model = getModel();
 
     const result = await model.generateContent({
       contents: [
