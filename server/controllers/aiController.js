@@ -4,7 +4,7 @@ import { v2 as cloudinary } from "cloudinary";
 import axios from "axios";
 import fs from "fs";
 import FormData from "form-data";
-import { GoogleGenerativeAI } from "@google/generative-ai";
+//import { GoogleGenerativeAI } from "@google/generative-ai";
 import { createRequire } from "module";
 import { clerkClient } from "@clerk/express";
 import OpenAI from "openai";
@@ -65,11 +65,14 @@ export const generateArticle = async (req, res) => {
 // ================== BLOG TITLE ==================
 export const generateBlogTitle = async (req, res) => {
   try {
-    const { prompt, category } = req.body;
+    const { prompt, blogCategories } = req.body;
 
-    const fullPrompt = `Generate exactly 8 catchy blog titles for "${prompt}" in ${category} category.
-Each title must be on a new line.
-Do not include any introduction or extra text.`;
+    if (!prompt) {
+      return res.json({ success: false, message: "Prompt is required" });
+    }
+
+    const fullPrompt = `Generate exactly 8 catchy blog titles for "${prompt}" in ${blogCategories} category.
+Return ONLY titles, each on a new line. No numbering, no extra text.`;
 
     const response = await AI.chat.completions.create({
       model: "gemini-3-flash-preview",
@@ -80,10 +83,16 @@ Do not include any introduction or extra text.`;
         },
       ],
       temperature: 0.7,
-      max_tokens: 200,
+      max_tokens: 700,
     });
 
-    const content = response.choices[0].message.content;
+    let content = response.choices[0].message.content;
+
+    // ✅ CLEAN RESPONSE
+    content = content
+      .replace(/Here are.*?:/i, "")
+      .replace(/\d+\.\s*/g, "")
+      .trim();
 
     res.json({ success: true, content });
 
@@ -92,7 +101,6 @@ Do not include any introduction or extra text.`;
     res.json({ success: false, message: error.message });
   }
 };
-
 // ================== IMAGE ==================
 export const generateImage = async (req, res) => {
   try {
@@ -169,7 +177,7 @@ export const resumeReview = async (req, res) => {
     const buffer = fs.readFileSync(req.file.path);
     const data = await pdfParse(buffer);
 
-   // const model = getModel();
+    const model = getModel();
 
     const result = await model.generateContent({
       contents: [

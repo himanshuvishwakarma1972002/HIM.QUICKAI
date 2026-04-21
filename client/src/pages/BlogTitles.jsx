@@ -3,8 +3,6 @@ import { Hash, Sparkles } from 'lucide-react'
 import axios from 'axios'
 import toast from 'react-hot-toast'
 import { useAuth } from '@clerk/react'
-import ReactMarkdown from 'react-markdown'
-import { GoogleGenerativeAI } from "@google/generative-ai";
 
 axios.defaults.baseURL = import.meta.env.VITE_BASE_URL;
 
@@ -17,7 +15,7 @@ const BlogTitles = () => {
 
   const [selectedCategory, setSelectedCategory] = useState('General')
   const [input, setInput] = useState('')
-  const [content, setContent] = useState('')
+  const [titles, setTitles] = useState([])
   const [loading, setLoading] = useState(false)
 
   const { getToken } = useAuth()
@@ -25,18 +23,19 @@ const BlogTitles = () => {
   const onSubmitHandler = async (e) => {
     e.preventDefault();
 
-    if (!input.trim()) {
-      return toast.error("Please enter a keyword")
+    if (!input) {
+      return toast.error("Enter a keyword");
     }
 
     try {
       setLoading(true)
 
-      const prompt = `Generate 8 catchy blog titles for "${input}" in ${selectedCategory} category. Return as a numbered list.`
-
       const { data } = await axios.post(
         '/api/ai/generate-blog-title',
-        { prompt },
+        {
+          prompt: input,
+          blogCategories: selectedCategory
+        },
         {
           headers: {
             Authorization: `Bearer ${await getToken()}`
@@ -44,8 +43,11 @@ const BlogTitles = () => {
         }
       )
 
+      console.log("API RESPONSE:", data);
+
       if (data.success) {
-        setContent(data.content)
+        const list = data.content.split("\n").filter(Boolean);
+        setTitles(list);
       } else {
         toast.error(data.message)
       }
@@ -128,7 +130,7 @@ const BlogTitles = () => {
           <h1 className='text-xl font-semibold'>Generated Titles</h1>
         </div>
 
-        {!content ? (
+        {titles.length === 0 ? (
           <div className='flex-1 flex justify-center items-center'>
             <div className='text-sm flex flex-col items-center gap-5 text-gray-400 text-center'>
               <Hash className='w-9 h-9' />
@@ -137,9 +139,13 @@ const BlogTitles = () => {
           </div>
         ) : (
           <div className='mt-3 h-full overflow-y-auto text-sm text-slate-700'>
-            <div className='prose prose-sm max-w-none'>
-              <ReactMarkdown>{content}</ReactMarkdown>
-            </div>
+            <ul className='space-y-2'>
+              {titles.map((title, i) => (
+                <li key={i} className='p-2 bg-gray-50 rounded-md border'>
+                  {title}
+                </li>
+              ))}
+            </ul>
           </div>
         )}
 

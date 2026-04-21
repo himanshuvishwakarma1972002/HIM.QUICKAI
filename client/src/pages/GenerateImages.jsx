@@ -1,5 +1,8 @@
 import React, { useState } from 'react'
 import { ImageIcon, Sparkles } from 'lucide-react'
+import axios from 'axios'
+import toast from 'react-hot-toast'
+import { useAuth } from '@clerk/react'
 
 const GenerateImages = () => {
 
@@ -10,11 +13,34 @@ const GenerateImages = () => {
 
   const [selectedCategory, setSelectedCategory] = useState('Realistic')
   const [input, setInput] = useState('')
-  const [isPublic, setIsPublic] = useState(false) // ✅ FIX ADDED
+  const [isPublic, setIsPublic] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [imageUrl, setImageUrl] = useState('')
 
-  const onSubmitHandler = (e) => {
+  const { getToken } = useAuth()
+
+  const onSubmitHandler = async (e) => {
     e.preventDefault()
-    console.log(input, selectedCategory, isPublic) // ✅ updated
+    if (!input) { toast.error('Please describe your image'); return }
+
+    try {
+      setLoading(true)
+      const prompt = `Generate an image of ${input} in the style ${selectedCategory}.`
+      const { data } = await axios.post(
+        '/api/ai/generate-image',
+        { prompt, publish: isPublic },
+        { headers: { Authorization: `Bearer ${await getToken()}` } }
+      )
+      if (data.success) {
+        setImageUrl(data.content)
+      } else {
+        toast.error(data.message)
+      }
+    } catch (error) {
+      toast.error(error.message)
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -26,7 +52,6 @@ const GenerateImages = () => {
         className='w-full max-w-lg p-6 bg-white rounded-xl border border-gray-200 space-y-5 shadow-sm'
       >
 
-        {/* Header */}
         <div className='flex items-center gap-3'>
           <Sparkles className='w-5 text-green-600'/>
           <h1 className='text-lg font-semibold bg-gradient-to-r from-green-500 to-emerald-600 bg-clip-text text-transparent'>
@@ -34,10 +59,8 @@ const GenerateImages = () => {
           </h1>
         </div>
 
-        {/* Input */}
         <div>
           <p className='text-sm font-medium'>Describe Your Image</p>
-          
           <textarea  
             value={input}
             onChange={(e) => setInput(e.target.value)}
@@ -48,10 +71,8 @@ const GenerateImages = () => {
           />
         </div>
 
-        {/* Style */}
         <div>
           <p className='text-sm font-medium'>Style</p>
-
           <div className='flex flex-wrap gap-2 mt-2'>
             {imageStyles.map((item) => (
               <button
@@ -69,10 +90,8 @@ const GenerateImages = () => {
           </div>
         </div>
         
-        {/* Toggle Public/Private */}
         <div className='flex items-center justify-between mt-4'>
           <p className='text-sm font-medium'>Make Image Public</p>
-
           <button
             type="button"
             onClick={() => setIsPublic(!isPublic)}
@@ -86,13 +105,16 @@ const GenerateImages = () => {
           </button>
         </div>
 
-        {/* Submit */}
         <button
           type="submit"
-          className='w-full mt-4 bg-gradient-to-r from-green-500 to-emerald-600 text-white py-2 rounded-md hover:opacity-90 transition flex items-center justify-center gap-2 shadow'
+          disabled={loading}
+          className='w-full mt-4 bg-gradient-to-r from-green-500 to-emerald-600 text-white py-2 rounded-md hover:opacity-90 disabled:opacity-50 transition flex items-center justify-center gap-2 shadow'
         >
-          <ImageIcon className='w-4 h-4'/>
-          Generate Image
+          {loading ? (
+            <><Sparkles className='w-4 h-4 animate-spin'/>Generating...</>
+          ) : (
+            <><ImageIcon className='w-4 h-4'/>Generate Image</>
+          )}
         </button>
 
       </form>
@@ -105,11 +127,15 @@ const GenerateImages = () => {
           <h1 className='text-lg font-semibold text-gray-800'>Generated Image</h1>
         </div>
 
-        <div className='flex-1 flex justify-center items-center'>
-          <div className='text-sm flex flex-col items-center gap-4 text-gray-400 text-center'>
-            <ImageIcon className='w-8 h-8 text-green-300'/>
-            <p>Describe an image and click "Generate Image"</p>
-          </div>
+        <div className='flex-1 flex justify-center items-center mt-3'>
+          {imageUrl ? (
+            <img src={imageUrl} alt='Generated' className='max-w-full max-h-80 rounded-lg object-contain' />
+          ) : (
+            <div className='text-sm flex flex-col items-center gap-4 text-gray-400 text-center'>
+              <ImageIcon className='w-8 h-8 text-green-300'/>
+              <p>Describe an image and click "Generate Image"</p>
+            </div>
+          )}
         </div>
 
       </div>
