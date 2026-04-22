@@ -1,14 +1,47 @@
 import { FileTextIcon, Sparkles, UploadCloud, X } from 'lucide-react'
 import React, { useState } from 'react'
+import axios from 'axios'
+import toast from 'react-hot-toast'
+import { useAuth } from '@clerk/react'
+
+axios.defaults.baseURL = import.meta.env.VITE_BASE_URL
 
 const ReviewResime = () => {
 
   const [file, setFile] = useState(null)
   const [preview, setPreview] = useState(null)
+  const [result, setResult] = useState('')
+  const [loading, setLoading] = useState(false)
+  const { getToken } = useAuth()
 
-  const onSubmitHandler = (e) => {
+  const onSubmitHandler = async (e) => {
     e.preventDefault()
-    console.log(file)
+    if (!file) return toast.error('Please upload a resume PDF')
+
+    try {
+      setLoading(true)
+      const formData = new FormData()
+      formData.append('resume', file)
+
+      const token = await getToken()
+      const { data } = await axios.post('/api/ai/resume-review', formData, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {}
+      })
+
+      if (data.success) {
+        setResult(data.content)
+      } else {
+        const message = data.message || 'Resume review failed'
+        setResult(message)
+        toast.error(message)
+      }
+    } catch (error) {
+      const message = error?.response?.data?.message || 'Something went wrong'
+      setResult(message)
+      toast.error(message)
+    } finally {
+      setLoading(false)
+    }
   }
 
   const handleFileUpload = (e) => {
@@ -23,6 +56,7 @@ const ReviewResime = () => {
     if (preview) URL.revokeObjectURL(preview)
     setFile(null)
     setPreview(null)
+    setResult('')
   }
 
   return (
@@ -80,7 +114,6 @@ const ReviewResime = () => {
               accept="application/pdf"
               onChange={handleFileUpload}
               className="hidden"
-              required
             />
           </label>
 
@@ -92,10 +125,11 @@ const ReviewResime = () => {
         {/* Submit */}
         <button
           type="submit"
+          disabled={loading}
           className='w-full bg-gradient-to-r from-[#00DA83] to-[#00B86B] text-white py-2 rounded-md hover:opacity-90 transition flex items-center justify-center gap-2'
         >
           <FileTextIcon className='w-4 h-4'/>
-          Review Resume
+          {loading ? 'Reviewing...' : 'Review Resume'}
         </button>
 
       </form>
@@ -109,16 +143,14 @@ const ReviewResime = () => {
         </div>
 
         <div className='flex-1 flex justify-center items-center'>
-          {preview ? (
-            <iframe
-              src={preview}
-              title="PDF Preview"
-              className='w-full h-80 rounded-md border'
-            />
+          {result ? (
+            <p className='w-full h-80 overflow-y-auto rounded-md border p-3 text-sm whitespace-pre-line'>
+              {result}
+            </p>
           ) : (
             <div className='text-sm flex flex-col items-center gap-4 text-gray-400 text-center'>
               <FileTextIcon className='w-10 h-10'/>
-              <p>Upload a resume and click "Review Resume"</p>
+              <p>Upload a resume and click "Review Resume" to see written feedback</p>
             </div>
           )}
         </div>

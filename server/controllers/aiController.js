@@ -4,8 +4,7 @@ import { v2 as cloudinary } from "cloudinary";
 import axios from "axios";
 import fs from "fs";
 import FormData from "form-data";
-//import { GoogleGenerativeAI } from "@google/generative-ai";
-import { createRequire } from "module";
+import { PDFParse } from "pdf-parse";
 import { clerkClient } from "@clerk/express";
 import OpenAI from "openai";
 
@@ -13,8 +12,60 @@ import OpenAI from "openai";
 
 const AI = new OpenAI({
     apiKey: process.env.GEMINI_API_KEY,
-    baseURL: "https://generativelanguage.googleapis.com/v1beta/openai/"
+    baseURL: "https://generativelanguage.googleapis.com/v1beta/openai"
 });
+const GEMINI_MODEL = (process.env.GEMINI_MODEL || "gemini-1.5-flash-002").replace(/"/g, "").trim();
+const FALLBACK_MODELS = [...new Set([
+  GEMINI_MODEL,
+  "gemini-1.5-flash-002",
+  "gemini-1.5-pro"
+])];
+
+const createChatCompletion = async (messages, maxTokens) => {
+  let lastError;
+  for (const model of FALLBACK_MODELS) {
+    try {
+      return await AI.chat.completions.create({
+        model,
+        messages,
+        temperature: 0.7,
+        max_tokens: maxTokens,
+      });
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError;
+};
+
+const buildResumeFallbackReview = (resumeText) => {
+  const text = (resumeText || "").toLowerCase();
+  const sections = {
+    summary: /summary|profile|objective/.test(text),
+    skills: /skills|tech stack|technologies/.test(text),
+    experience: /experience|employment|work history/.test(text),
+    projects: /project/.test(text),
+    education: /education|university|college|school/.test(text),
+  };
+
+  const missing = Object.entries(sections)
+    .filter(([, present]) => !present)
+    .map(([name]) => name);
+
+  return [
+    "AI review service is temporarily unavailable, so this is a fallback resume review.",
+    "",
+    "Strengths:",
+    "- Resume file was parsed successfully.",
+    `- Detected sections: ${Object.entries(sections).filter(([, v]) => v).map(([k]) => k).join(", ") || "none"}.`,
+    "",
+    "Improvements:",
+    `- Add missing sections: ${missing.length ? missing.join(", ") : "none"}.`,
+    "- Add measurable impact in experience/project bullets (numbers, percentages, outcomes).",
+    "- Keep each bullet action-oriented and concise.",
+    "- Tailor skills and keywords to the target job description."
+  ].join("\n");
+};
 
 // ================== ARTICLE ==================
 export const generateArticle = async (req, res) => {
@@ -28,16 +79,11 @@ export const generateArticle = async (req, res) => {
       return res.json({ success: false, message: "You have reached your free usage limit. Upgrade to a premium plan to continue using the AI generator." });
       
     }
-    const response = await AI.chat.completions.create({
-      model: "gemini-3-flash-preview",
-      messages: [{
+    const response = await createChatCompletion([{
               role: "user",
               content: prompt,
           },
-      ],
-      temperature: 0.7,
-      max_tokens: length,
-  });
+      ], length);
 
   const content = response.choices[0].message.content;
 
@@ -65,42 +111,24 @@ export const generateArticle = async (req, res) => {
 // ================== BLOG TITLE ==================
 export const generateBlogTitle = async (req, res) => {
   try {
-    const { prompt, blogCategories } = req.body;
-
-    if (!prompt) {
-      return res.json({ success: false, message: "Prompt is required" });
-    }
-
-    const fullPrompt = `Generate exactly 8 catchy blog titles for "${prompt}" in ${blogCategories} category.
-Return ONLY titles, each on a new line. No numbering, no extra text.`;
-
-    const response = await AI.chat.completions.create({
-      model: "gemini-3-flash-preview",
-      messages: [
+    const { prompt } = req.body;
+    const response = await createChatCompletion([
         {
           role: "user",
-          content: fullPrompt,
+          content: `Generate 5 blog titles for: ${prompt}`,
         },
-      ],
-      temperature: 0.7,
-      max_tokens: 700,
-    });
-
-    let content = response.choices[0].message.content;
-
-    // ✅ CLEAN RESPONSE
-    content = content
-      .replace(/Here are.*?:/i, "")
-      .replace(/\d+\.\s*/g, "")
-      .trim();
+      ], 300);
+    const content = response.choices[0].message.content;
 
     res.json({ success: true, content });
 
   } catch (error) {
     console.log("BLOG ERROR:", error.message);
-    res.json({ success: false, message: error.message });
+
+    res.json({ success: false, message: "Failed to generate titles" });
   }
 };
+
 // ================== IMAGE ==================
 export const generateImage = async (req, res) => {
   try {
@@ -155,11 +183,25 @@ export const removeImageBackground = async (req, res) => {
 export const removeImageObject = async (req, res) => {
   try {
     const { object } = req.body;
+    if (!object || !object.trim()) {
+      return res.json({ success: false, message: "Please provide object to remove" });
+    }
 
     const upload = await cloudinary.uploader.upload(req.file.path);
+    const normalizedObject = object
+      .trim()
+      .toLowerCase()
+      .replace(/^remove\s+/, "")
+      .replace(/\s+/g, "_")
+      .replace(/[^a-z0-9_]/g, "");
 
+    const effectPrompt = `gen_remove:prompt_${normalizedObject}`;
     const url = cloudinary.url(upload.public_id, {
-      transformation: [{ effect: `gen_remove:${object}` }],
+      resource_type: "image",
+      type: "upload",
+      secure: true,
+      sign_url: true,
+      transformation: [{ effect: effectPrompt }],
     });
 
     fs.unlinkSync(req.file.path);
@@ -167,6 +209,7 @@ export const removeImageObject = async (req, res) => {
     res.json({ success: true, content: url });
 
   } catch (error) {
+    console.log("OBJECT REMOVE ERROR:", error.message);
     res.json({ success: false, message: "Object removal failed" });
   }
 };
@@ -174,32 +217,40 @@ export const removeImageObject = async (req, res) => {
 // ================== RESUME REVIEW ==================
 export const resumeReview = async (req, res) => {
   try {
+    if (!req.file) {
+      return res.json({ success: false, message: "Please upload a resume PDF" });
+    }
+
     const buffer = fs.readFileSync(req.file.path);
-    const data = await pdfParse(buffer);
+    const parser = new PDFParse({ data: buffer });
+    const data = await parser.getText();
+    await parser.destroy();
 
-    const model = getModel();
-
-    const result = await model.generateContent({
-      contents: [
+    let content = "";
+    try {
+      const response = await createChatCompletion([
         {
           role: "user",
-          parts: [
-            {
-              text: `Review this resume and give suggestions:\n\n${data.text}`,
-            },
-          ],
+          content: `Review this resume and give constructive feedback on strengths, weaknesses, and improvements:\n\n${data.text}`,
         },
-      ],
-    });
+      ], 1000);
+      content = response.choices[0].message.content;
+    } catch (aiError) {
+      console.log("RESUME AI PROVIDER ERROR:", aiError?.status, aiError?.message);
+      content = buildResumeFallbackReview(data.text);
+    }
 
-    fs.unlinkSync(req.file.path);
+    if (req.file?.path && fs.existsSync(req.file.path)) {
+      fs.unlinkSync(req.file.path);
+    }
 
     res.json({
       success: true,
-      content: result.response.text(),
+      content,
     });
 
   } catch (error) {
-    res.json({ success: false, message: "Resume review failed" });
+    console.log("RESUME ERROR:", error.message);
+    res.json({ success: false, message: error.message || "Resume review failed" });
   }
 };

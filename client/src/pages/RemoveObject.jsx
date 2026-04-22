@@ -35,8 +35,7 @@ const RemoveObject = () => {
         formData,
         {
           headers: {
-            Authorization: `Bearer ${await getToken()}`,
-            'Content-Type': 'multipart/form-data'
+            Authorization: `Bearer ${await getToken()}`
           }
         }
       )
@@ -44,15 +43,8 @@ const RemoveObject = () => {
       console.log("API RESULT:", data.content)
 
       if (data.success) {
-
-        // ✅ HANDLE BASE64 OR URL
-        let imageData = data.content
-
-        if (imageData && !imageData.startsWith('data:image')) {
-          imageData = `data:image/png;base64,${imageData}`
-        }
-
-        setResult(imageData)
+        // Backend returns a Cloudinary URL; use as-is.
+        setResult(data.content)
 
       } else {
         toast.error(data.message)
