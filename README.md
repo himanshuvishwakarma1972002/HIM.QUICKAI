@@ -18,7 +18,7 @@
 ## 🌐 Live Demo
 
 🔗 **Try it now:**  
-👉 https://your-live-demo-link.com
+👉 https://him-quickai.vercel.app/
 
 ---
 

@@ -14,11 +14,11 @@ const AI = new OpenAI({
     apiKey: process.env.GEMINI_API_KEY,
     baseURL: "https://generativelanguage.googleapis.com/v1beta/openai"
 });
-const GEMINI_MODEL = (process.env.GEMINI_MODEL || "gemini-1.5-flash-002").replace(/"/g, "").trim();
+const GEMINI_MODEL = (process.env.GEMINI_MODEL || "gemini-3-flash-preview").replace(/"/g, "").trim();
 const FALLBACK_MODELS = [...new Set([
   GEMINI_MODEL,
-  "gemini-1.5-flash-002",
-  "gemini-1.5-pro"
+  "gemini-3-flash-preview"
+
 ])];
 
 const createChatCompletion = async (messages, maxTokens) => {
@@ -111,106 +111,280 @@ export const generateArticle = async (req, res) => {
 // ================== BLOG TITLE ==================
 export const generateBlogTitle = async (req, res) => {
   try {
+    // ✅ FIX: auth()
+    const { userId } = req.auth();
     const { prompt } = req.body;
-    const response = await createChatCompletion([
-        {
-          role: "user",
-          content: `Generate 5 blog titles for: ${prompt}`,
-        },
-      ], 300);
-    const content = response.choices[0].message.content;
+    const plan = req.plan;
+    const free_usage = req.free_usage;
 
-    res.json({ success: true, content });
+    // ✅ validation
+    if (!prompt || prompt.trim() === "") {
+      return res.json({
+        success: false,
+        message: "Prompt is required",
+      });
+    }
+
+    // ✅ FIX: correct usage logic
+    if (plan === 'free' && free_usage >= 10) {
+      return res.json({
+        success: false,
+        message: "Free limit reached. Upgrade to premium."
+      });
+    }
+
+    // ✅ BETTER PROMPT (VERY IMPORTANT)
+    const aiPrompt = `Generate exactly 5 catchy, SEO-friendly blog titles for the topic: "${prompt}".
+
+Rules:
+- Each title on a new line
+- No numbering
+- No explanation
+- Keep them short and engaging`;
+
+    // ✅ USE YOUR FALLBACK FUNCTION
+    const response = await createChatCompletion(
+      [{ role: "user", content: aiPrompt }],
+      500
+    );
+
+    let content = response?.choices?.[0]?.message?.content || "";
+
+    // ✅ CLEAN OUTPUT
+    const titles = content
+      .split("\n")
+      .map(t => t.replace(/^\d+[\).\-\s]*/, "").trim())
+      .filter(t => t.length > 0);
+
+    const finalContent = titles.join("\n");
+
+    // ✅ SAVE TO DATABASE
+    await sql`
+      INSERT INTO creations (user_id, prompt, content, type)
+      VALUES (${userId}, ${prompt}, ${finalContent}, 'blog-title')
+    `;
+
+    // ✅ UPDATE USAGE
+    if (plan === 'free') {
+      await clerkClient.users.updateUserMetadata(userId, {
+        privateMetadata: {
+          free_usage: free_usage + 1
+        }
+      });
+    }
+
+    // ✅ RESPONSE (better for frontend)
+    res.json({
+      success: true,
+      titles,       // array (BEST)
+      content: finalContent // fallback (string)
+    });
 
   } catch (error) {
-    console.log("BLOG ERROR:", error.message);
+    console.log("BLOG TITLE ERROR:", error.message);
 
-    res.json({ success: false, message: "Failed to generate titles" });
+    res.json({
+      success: false,
+      message: error.message || "Failed to generate blog titles",
+    });
   }
 };
-
 // ================== IMAGE ==================
+
 export const generateImage = async (req, res) => {
   try {
-    const { prompt } = req.body;
+    // ✅ AUTH (important)
+    const { userId } = req.auth();
 
+    const { prompt, publish } = req.body;
+
+    // ✅ VALIDATION
+    if (!prompt || prompt.trim() === "") {
+      return res.json({
+        success: false,
+        message: "Prompt is required",
+      });
+    }
+
+    // ✅ CREATE FORM DATA
     const formData = new FormData();
     formData.append("prompt", prompt);
 
-    const { data } = await axios.post(
+    // ✅ CALL CLIPDROP API
+    const response = await axios.post(
       "https://clipdrop-api.co/text-to-image/v1",
       formData,
       {
-        headers: { "x-api-key": process.env.CLIPDROP_API_KEY },
+        headers: {
+          "x-api-key": process.env.CLIPDROP_API_KEY,
+          ...formData.getHeaders(), // 🔥 IMPORTANT
+        },
         responseType: "arraybuffer",
       }
     );
 
-    const base64 = Buffer.from(data).toString("base64");
+    // ✅ CONVERT TO BASE64
+    const base64 = Buffer.from(response.data).toString("base64");
 
+    // ✅ UPLOAD TO CLOUDINARY
     const upload = await cloudinary.uploader.upload(
-      `data:image/png;base64,${base64}`
+      `data:image/png;base64,${base64}`,
+      {
+        folder: "ai_images",
+      }
     );
 
-    res.json({ success: true, content: upload.secure_url });
+    const imageUrl = upload.secure_url;
+
+    // ✅ SAVE TO DATABASE
+    await sql`
+      INSERT INTO creations (user_id, prompt, content, type, publish)
+      VALUES (${userId}, ${prompt}, ${imageUrl}, 'image', ${publish ?? false})
+    `;
+
+    // ✅ RESPONSE
+    res.json({
+      success: true,
+      content: imageUrl,
+    });
 
   } catch (error) {
-    res.json({ success: false, message: "Image generation failed" });
+    console.log("IMAGE ERROR:", error.response?.data || error.message);
+
+    res.json({
+      success: false,
+      message: error.response?.data?.error || "Image generation failed",
+    });
   }
 };
 
 // ================== REMOVE BG ==================
+
+
 export const removeImageBackground = async (req, res) => {
   try {
+    // ✅ AUTH
+    const { userId } = req.auth();
+
+    const plan = req.plan;
+
+    // ✅ CHECK FILE
     if (!req.file) {
-      return res.json({ success: false, message: "No image uploaded" });
+      return res.json({
+        success: false,
+        message: "No image uploaded",
+      });
     }
 
+    // ✅ PREMIUM CHECK
+    if (plan !== "premium") {
+      return res.json({
+        success: false,
+        message: "This feature is only available for premium users.",
+      });
+    }
+
+    // ✅ UPLOAD + REMOVE BG
     const result = await cloudinary.uploader.upload(req.file.path, {
+      folder: "ai_bg_removed",
       transformation: [{ effect: "background_removal" }],
     });
 
-    fs.unlinkSync(req.file.path);
+    const imageUrl = result.secure_url;
 
-    res.json({ success: true, content: result.secure_url });
+    // ✅ DELETE TEMP FILE
+    if (fs.existsSync(req.file.path)) {
+      fs.unlinkSync(req.file.path);
+    }
+
+    // ✅ SAVE TO DATABASE
+    await sql`
+      INSERT INTO creations (user_id, prompt, content, type, publish)
+      VALUES (${userId}, 'Background removed image', ${imageUrl}, 'image', false)
+    `;
+
+    // ✅ RESPONSE
+    res.json({
+      success: true,
+      content: imageUrl,
+    });
 
   } catch (error) {
-    res.json({ success: false, message: "Background removal failed" });
+    console.log("REMOVE BG ERROR:", error.message);
+
+    res.json({
+      success: false,
+      message: error.message || "Background removal failed",
+    });
   }
 };
 
 // ================== REMOVE OBJECT ==================
+
+
 export const removeImageObject = async (req, res) => {
   try {
+    // ✅ AUTH
+    const { userId } = req.auth();
+
     const { object } = req.body;
-    if (!object || !object.trim()) {
-      return res.json({ success: false, message: "Please provide object to remove" });
+    const image = req.file;
+    const plan = req.plan;
+
+    // ✅ VALIDATION
+    if (!image) {
+      return res.json({ success: false, message: "No image uploaded" });
     }
 
-    const upload = await cloudinary.uploader.upload(req.file.path);
+    if (!object || object.trim() === "") {
+      return res.json({ success: false, message: "Object is required" });
+    }
+
+    // ✅ PREMIUM CHECK
+    if (plan !== "premium") {
+      return res.json({
+        success: false,
+        message: "This feature is only available for premium users.",
+      });
+    }
+
+    // ✅ UPLOAD IMAGE FIRST
+    const upload = await cloudinary.uploader.upload(image.path);
+
+    // ✅ CLEAN OBJECT NAME
     const normalizedObject = object
       .trim()
       .toLowerCase()
-      .replace(/^remove\s+/, "")
       .replace(/\s+/g, "_")
       .replace(/[^a-z0-9_]/g, "");
 
-    const effectPrompt = `gen_remove:prompt_${normalizedObject}`;
-    const url = cloudinary.url(upload.public_id, {
+    // ✅ REMOVE OBJECT
+    const imageUrl = cloudinary.url(upload.public_id, {
       resource_type: "image",
-      type: "upload",
       secure: true,
-      sign_url: true,
-      transformation: [{ effect: effectPrompt }],
+      transformation: [{ effect: `gen_remove:prompt_${normalizedObject}` }],
     });
 
-    fs.unlinkSync(req.file.path);
+    // ✅ DELETE TEMP FILE
+    if (fs.existsSync(image.path)) {
+      fs.unlinkSync(image.path);
+    }
 
-    res.json({ success: true, content: url });
+    // ✅ SAVE TO DB
+    await sql`
+      INSERT INTO creations (user_id, prompt, content, type, publish)
+      VALUES (${userId}, ${`Removed ${object} from image`}, ${imageUrl}, 'image', false)
+    `;
+
+    res.json({ success: true, content: imageUrl });
 
   } catch (error) {
-    console.log("OBJECT REMOVE ERROR:", error.message);
-    res.json({ success: false, message: "Object removal failed" });
+    console.log("REMOVE OBJECT ERROR:", error.message);
+
+    res.json({
+      success: false,
+      message: error.message || "Object removal failed",
+    });
   }
 };
 
@@ -248,6 +422,8 @@ export const resumeReview = async (req, res) => {
       success: true,
       content,
     });
+
+    
 
   } catch (error) {
     console.log("RESUME ERROR:", error.message);
