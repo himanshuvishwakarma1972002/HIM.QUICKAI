@@ -391,10 +391,13 @@ export const removeImageObject = async (req, res) => {
 // ================== RESUME REVIEW ==================
 export const resumeReview = async (req, res) => {
   try {
-    const { userId } = req.auth(); // ✅ get userId
+    const { userId } = req.auth();
 
     if (!req.file) {
-      return res.json({ success: false, message: "Please upload a resume PDF" });
+      return res.json({
+        success: false,
+        message: "Please upload a resume PDF"
+      });
     }
 
     // ✅ Read PDF
@@ -406,38 +409,75 @@ export const resumeReview = async (req, res) => {
     let content = "";
 
     try {
+      const prompt = `
+Analyze the following resume and provide a professional review.
+
+Return the response STRICTLY in markdown format.
+
+Structure:
+
+# Resume Analysis
+
+## Strengths
+- Bullet points
+
+## Weaknesses
+- Bullet points
+
+## Improvements
+- Actionable suggestions
+
+## ATS Score
+**Score:** XX/100  
+Short explanation
+
+Keep formatting clean, readable and professional.
+
+Resume:
+${data.text}
+      `;
+
       const response = await createChatCompletion(
-        [
-          {
-            role: "user",
-            content: `Review this resume and give constructive feedback on strengths, weaknesses, and improvements:\n\n${data.text}`,
-          },
-        ],
-        1000
+        [{ role: "user", content: prompt }],
+        1500
       );
 
       content = response.choices[0].message.content;
 
     } catch (aiError) {
-      console.log("RESUME AI PROVIDER ERROR:", aiError?.status, aiError?.message);
-      content = buildResumeFallbackReview(data.text);
+      console.log("RESUME AI ERROR:", aiError?.status, aiError?.message);
+
+      content = `
+# Resume Analysis
+
+## Strengths
+- Unable to analyze properly
+
+## Weaknesses
+- AI service unavailable
+
+## Improvements
+- Try again later
+
+## ATS Score
+**Score:** 50/100
+`;
     }
 
-    // ✅ SAVE TO DATABASE (🔥 THIS WAS MISSING)
+    // ✅ Save to DB
     await sql`
       INSERT INTO creations (user_id, prompt, content, type)
       VALUES (${userId}, ${"Resume Review"}, ${content}, 'resume-review')
     `;
 
-    // ✅ DELETE TEMP FILE
+    // ✅ Delete temp file
     if (req.file?.path && fs.existsSync(req.file.path)) {
       fs.unlinkSync(req.file.path);
     }
 
-    // ✅ RESPONSE
     res.json({
       success: true,
-      content,
+      content
     });
 
   } catch (error) {
@@ -445,7 +485,7 @@ export const resumeReview = async (req, res) => {
 
     res.json({
       success: false,
-      message: error.message || "Resume review failed",
+      message: error.message || "Resume review failed"
     });
   }
 };

@@ -1,8 +1,10 @@
 import React, { useState } from 'react'
-import { EraserIcon, Sparkles, UploadCloud, X } from 'lucide-react'
+import { EraserIcon, Sparkles, UploadCloud, X, Download, Copy } from 'lucide-react'
 import axios from 'axios'
 import toast from 'react-hot-toast'
 import { useAuth } from '@clerk/react'
+
+axios.defaults.baseURL = import.meta.env.VITE_BASE_URL;
 
 const RemoveBackground = () => {
 
@@ -15,7 +17,10 @@ const RemoveBackground = () => {
 
   const onSubmitHandler = async (e) => {
     e.preventDefault()
-    if (!image) { toast.error('Please upload an image'); return }
+    if (!image) {
+      toast.error('Please upload an image')
+      return
+    }
 
     try {
       setLoading(true)
@@ -25,7 +30,12 @@ const RemoveBackground = () => {
       const { data } = await axios.post(
         '/api/ai/remove-image-background',
         formData,
-        { headers: { Authorization: `Bearer ${await getToken()}` } }
+        {
+          headers: {
+            Authorization: `Bearer ${await getToken()}`,
+            'Content-Type': 'multipart/form-data'
+          }
+        }
       )
 
       if (data.success) {
@@ -57,78 +67,135 @@ const RemoveBackground = () => {
   }
 
   return (
-    <div className='h-full overflow-y-scroll p-6 flex items-start flex-wrap gap-6 bg-gray-50 text-slate-700'>
-      
-      {/* Left column */}
-      <form 
+    <div className='h-full overflow-y-auto p-6 flex flex-wrap gap-6 bg-gradient-to-br from-gray-50 to-gray-100'>
+
+      {/* LEFT PANEL */}
+      <form
         onSubmit={onSubmitHandler}
-        className='w-full max-w-lg p-6 bg-white rounded-xl border border-gray-200 space-y-5 shadow-sm'
+        className='w-full max-w-lg p-6 bg-white rounded-2xl shadow-md border border-gray-200 space-y-6'
       >
 
+        {/* Header */}
         <div className='flex items-center gap-3'>
-          <Sparkles className='w-5 text-[#FF4938]'/>
-          <h1 className='text-lg font-semibold'>Background Removal</h1>
+          <div className='p-2 bg-red-100 rounded-lg'>
+            <Sparkles className='w-5 h-5 text-red-500'/>
+          </div>
+          <h1 className='text-lg font-semibold'>Background Remover</h1>
         </div>
 
+        {/* Upload Box */}
         <div>
           <p className='text-sm font-medium mb-2'>Upload Image</p>
+
           <label
             htmlFor="bgUpload"
-            className='relative flex items-center justify-center w-full h-32 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-[#FF4938] transition bg-gray-100 overflow-hidden'
+            className='relative flex items-center justify-center w-full h-40 border-2 border-dashed border-gray-300 rounded-xl cursor-pointer hover:border-red-400 transition bg-gray-100 overflow-hidden'
           >
             {preview ? (
               <>
                 <img src={preview} alt="preview" className='h-full w-full object-contain'/>
+
                 <button
                   type="button"
-                  onClick={(e) => { e.preventDefault(); removeImage() }}
-                  className='absolute top-2 right-2 z-10 bg-white/90 hover:bg-white p-1.5 rounded-full shadow'
+                  onClick={(e) => {
+                    e.preventDefault()
+                    removeImage()
+                  }}
+                  className='absolute top-2 right-2 bg-white/90 hover:bg-white p-1.5 rounded-full shadow'
                 >
                   <X className='w-4 h-4 text-red-500'/>
                 </button>
               </>
             ) : (
-              <div className='flex flex-col items-center justify-center text-gray-400'>
-                <UploadCloud className='w-7 h-7 mb-1'/>
-                <p className='text-xs'>Click to Upload</p>
+              <div className='flex flex-col items-center text-gray-400'>
+                <UploadCloud className='w-8 h-8 mb-1'/>
+                <p className='text-sm'>Click to Upload</p>
+                <span className='text-xs'>PNG, JPG supported</span>
               </div>
             )}
-            <input id="bgUpload" type="file" accept="image/*" onChange={handleImageUpload} className="hidden"/>
+
+            <input
+              id="bgUpload"
+              type="file"
+              accept="image/*"
+              onChange={handleImageUpload}
+              className="hidden"
+            />
           </label>
-          <p className='text-xs text-gray-500 mt-2'>Supports JPG, PNG and other formats</p>
         </div>
 
+        {/* Submit */}
         <button
           type="submit"
           disabled={loading}
-          className='w-full bg-gradient-to-r from-[#F6AB41] to-[#FF4938] text-white py-2 rounded-md hover:opacity-90 disabled:opacity-50 transition flex items-center justify-center gap-2'
+          className='w-full bg-gradient-to-r from-orange-400 to-red-500 text-white py-2.5 rounded-lg hover:opacity-90 transition flex items-center justify-center gap-2 shadow'
         >
-          {loading ? (
-            <><Sparkles className='w-4 h-4 animate-spin'/>Processing...</>
-          ) : (
-            <><EraserIcon className='w-4 h-4'/>Remove Background</>
-          )}
+          {loading
+            ? <span className='w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin'></span>
+            : <EraserIcon className='w-4 h-4'/>
+          }
+          {loading ? "Processing..." : "Remove Background"}
         </button>
 
       </form>
 
-      {/* Right column */}
-      <div className='w-full max-w-lg p-6 bg-white rounded-xl border border-gray-200 min-h-96 flex flex-col'>
-        
-        <div className='flex items-center gap-3'>
-          <EraserIcon className='w-5 h-5 text-[#FF4938]'/>
+      {/* RIGHT PANEL */}
+      <div className='w-full max-w-lg p-6 bg-white rounded-2xl shadow-md border border-gray-200 flex flex-col min-h-[500px]'>
+
+        {/* Header */}
+        <div className='flex items-center gap-3 mb-4'>
+          <div className='p-2 bg-red-100 rounded-lg'>
+            <EraserIcon className='w-5 h-5 text-red-500'/>
+          </div>
           <h1 className='text-lg font-semibold'>Processed Image</h1>
         </div>
 
-        <div className='flex-1 flex justify-center items-center mt-3'>
+        <div className='flex-1 flex flex-col justify-center items-center gap-4'>
+
           {result ? (
-            <img src={result} alt="result" className='max-h-72 object-contain rounded-lg'/>
+            <>
+              <img
+                src={result}
+                alt="result"
+                className='max-h-80 object-contain rounded-xl shadow'
+              />
+
+              {/* Actions */}
+              <div className='flex gap-3'>
+
+                {/* Download */}
+                <a
+                  href={result}
+                  download
+                  className='flex items-center gap-2 px-3 py-1.5 text-sm bg-gray-100 hover:bg-gray-200 rounded-md transition'
+                >
+                  <Download className='w-4 h-4'/>
+                  Download
+                </a>
+
+                {/* Copy URL */}
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(result)
+                    toast.success("Copied!")
+                  }}
+                  className='flex items-center gap-2 px-3 py-1.5 text-sm bg-gray-100 hover:bg-gray-200 rounded-md transition'
+                >
+                  <Copy className='w-4 h-4'/>
+                  Copy URL
+                </button>
+
+              </div>
+            </>
           ) : (
-            <div className='text-sm flex flex-col items-center gap-4 text-gray-400 text-center'>
-              <EraserIcon className='w-10 h-10'/>
-              <p>Upload an image and click "Remove Background"</p>
+            <div className='text-sm flex flex-col items-center gap-3 text-gray-400 text-center'>
+              <EraserIcon className='w-10 h-10 opacity-60'/>
+              <p>
+                Upload image and click <span className='text-red-500 font-medium'>Remove Background</span>
+              </p>
             </div>
           )}
+
         </div>
 
       </div>

@@ -43,8 +43,6 @@ const BlogTitles = () => {
         }
       )
 
-      console.log("API RESPONSE:", data);
-
       if (data.success) {
         const list = data.content.split("\n").filter(Boolean);
         setTitles(list);
@@ -60,45 +58,48 @@ const BlogTitles = () => {
   }
 
   return (
-    <div className='h-full overflow-y-scroll p-6 flex items-start flex-wrap gap-4 text-slate-700'>
+    <div className='h-full overflow-y-auto p-6 flex flex-wrap gap-6 bg-gradient-to-br from-gray-50 to-gray-100'>
 
-      {/* LEFT */}
+      {/* LEFT PANEL */}
       <form
         onSubmit={onSubmitHandler}
-        className='w-full max-w-lg p-5 bg-white rounded-lg border border-gray-200 space-y-4'
+        className='w-full max-w-lg p-6 bg-white rounded-2xl shadow-md border border-gray-200 space-y-6'
       >
 
+        {/* Header */}
         <div className='flex items-center gap-3'>
-          <Sparkles className='w-6 text-[#8E37EB]' />
-          <h1 className='text-xl font-semibold'>AI Title Generator</h1>
+          <div className='p-2 rounded-lg bg-purple-100'>
+            <Sparkles className='w-5 h-5 text-purple-600' />
+          </div>
+          <h1 className='text-lg font-semibold'>AI Title Generator</h1>
         </div>
 
         {/* Keyword */}
         <div>
-          <p className='text-sm font-medium'>Keyword</p>
+          <p className='text-sm font-medium mb-1'>Keyword</p>
           <input
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            className='w-full p-2 px-3 mt-2 outline-none text-sm rounded-md border border-gray-300 focus:ring-2 focus:ring-purple-200'
-            placeholder='The future of artificial intelligence...'
+            className='w-full p-3 text-sm rounded-lg border border-gray-300 focus:ring-2 focus:ring-purple-300 outline-none transition'
+            placeholder='e.g. Future of AI in business...'
             required
           />
         </div>
 
         {/* Category */}
         <div>
-          <p className='text-sm font-medium'>Category</p>
+          <p className='text-sm font-medium mb-2'>Category</p>
 
-          <div className='flex flex-wrap gap-2 mt-2'>
+          <div className='flex flex-wrap gap-2'>
             {blogCategories.map((item) => (
               <button
                 type="button"
                 key={item}
                 onClick={() => setSelectedCategory(item)}
-                className={`px-3 py-1 text-sm rounded-full border transition
+                className={`px-4 py-1.5 text-xs rounded-full border transition-all duration-200
                   ${selectedCategory === item
-                    ? 'bg-[#8E37EB] text-white border-[#8E37EB]'
+                    ? 'bg-purple-600 text-white border-purple-600 shadow-sm'
                     : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-100'}`}
               >
                 {item}
@@ -111,41 +112,49 @@ const BlogTitles = () => {
         <button
           disabled={loading}
           type="submit"
-          className='w-full mt-4 bg-[#C341F6] text-white py-2 rounded-md hover:bg-[#8E37EB] transition flex items-center justify-center gap-2'
+          className='w-full mt-2 bg-gradient-to-r from-purple-500 to-purple-600 text-white py-2.5 rounded-lg hover:opacity-90 transition flex items-center justify-center gap-2 shadow'
         >
           {loading
             ? <span className='w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin'></span>
-            : <Hash className='w-5' />
+            : <Hash className='w-4 h-4' />
           }
-          {loading ? "Generating..." : "Generate Title"}
+          {loading ? "Generating..." : "Generate Titles"}
         </button>
 
       </form>
 
-      {/* RIGHT */}
-      <div className='w-full max-w-lg p-4 bg-white rounded-lg flex flex-col border border-gray-200 min-h-96'>
+      {/* RIGHT PANEL */}
+      <div className='w-full max-w-lg p-6 bg-white rounded-2xl shadow-md border border-gray-200 flex flex-col min-h-[500px]'>
 
-        <div className='flex items-center gap-3'>
-          <Hash className='w-5 h-5 text-[#8E37EB]' />
-          <h1 className='text-xl font-semibold'>Generated Titles</h1>
+        {/* Header */}
+        <div className='flex items-center gap-3 mb-4'>
+          <div className='p-2 rounded-lg bg-purple-100'>
+            <Hash className='w-5 h-5 text-purple-600' />
+          </div>
+          <h1 className='text-lg font-semibold'>Generated Titles</h1>
         </div>
 
         {titles.length === 0 ? (
-          <div className='flex-1 flex justify-center items-center'>
-            <div className='text-sm flex flex-col items-center gap-5 text-gray-400 text-center'>
-              <Hash className='w-9 h-9' />
-              <p>Enter a topic and click "Generate Title"</p>
-            </div>
+          <div className='flex-1 flex flex-col justify-center items-center text-gray-400 gap-3 text-center'>
+            <Hash className='w-10 h-10 opacity-60' />
+            <p className='text-sm'>
+              Enter a keyword and click <span className='text-purple-500 font-medium'>Generate Titles</span>
+            </p>
           </div>
         ) : (
-          <div className='mt-3 h-full overflow-y-auto text-sm text-slate-700'>
-            <ul className='space-y-2'>
+          <div className='flex-1 overflow-y-auto pr-2 custom-scrollbar'>
+
+            <ul className='space-y-3'>
               {titles.map((title, i) => (
-                <li key={i} className='p-2 bg-gray-50 rounded-md border'>
+                <li
+                  key={i}
+                  className='p-3 bg-gray-50 hover:bg-purple-50 transition rounded-lg border text-sm cursor-pointer'
+                >
                   {title}
                 </li>
               ))}
             </ul>
+
           </div>
         )}
 

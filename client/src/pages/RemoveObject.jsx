@@ -1,4 +1,4 @@
-import { ScissorsIcon, Sparkles, UploadCloud, X, Download } from 'lucide-react'
+import { ScissorsIcon, Sparkles, UploadCloud, X, Download, Copy } from 'lucide-react'
 import React, { useState } from 'react'
 import axios from 'axios'
 import toast from 'react-hot-toast'
@@ -35,17 +35,14 @@ const RemoveObject = () => {
         formData,
         {
           headers: {
-            Authorization: `Bearer ${await getToken()}`
+            Authorization: `Bearer ${await getToken()}`,
+            'Content-Type': 'multipart/form-data'
           }
         }
       )
 
-      console.log("API RESULT:", data.content)
-
       if (data.success) {
-        // Backend returns a Cloudinary URL; use as-is.
         setResult(data.content)
-
       } else {
         toast.error(data.message)
       }
@@ -70,73 +67,83 @@ const RemoveObject = () => {
 
   // ✅ REMOVE IMAGE
   const removeImage = () => {
+    if (preview) URL.revokeObjectURL(preview)
     setImage(null)
     setPreview(null)
     setResult(null)
   }
 
-  // ✅ DOWNLOAD IMAGE
+  // ✅ DOWNLOAD
   const downloadImage = () => {
     if (!result) return
-
     const link = document.createElement('a')
     link.href = result
     link.download = 'edited-image.png'
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
-
     toast.success("Image downloaded!")
   }
 
   return (
-    <div className='h-full overflow-y-scroll p-6 flex items-start flex-wrap gap-6 bg-gray-50 text-slate-700'>
+    <div className='h-full overflow-y-auto p-6 flex flex-wrap gap-6 bg-gradient-to-br from-gray-50 to-gray-100'>
 
-      {/* LEFT */}
+      {/* LEFT PANEL */}
       <form
         onSubmit={onSubmitHandler}
-        className='w-full max-w-lg p-6 bg-white rounded-xl border border-gray-200 space-y-5 shadow-sm'
+        className='w-full max-w-lg p-6 bg-white rounded-2xl shadow-md border border-gray-200 space-y-6'
       >
 
+        {/* Header */}
         <div className='flex items-center gap-3'>
-          <Sparkles className='w-5 text-blue-600' />
-          <h1 className='text-lg font-semibold'>Object Removal</h1>
+          <div className='p-2 bg-blue-100 rounded-lg'>
+            <Sparkles className='w-5 h-5 text-blue-600'/>
+          </div>
+          <h1 className='text-lg font-semibold'>Object Remover</h1>
         </div>
 
         {/* Upload */}
         <div>
           <p className='text-sm font-medium mb-2'>Upload Image</p>
-          <label className='relative flex items-center justify-center w-full h-32 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-blue-400 transition bg-gray-100 overflow-hidden'>
+
+          <label className='relative flex items-center justify-center w-full h-40 border-2 border-dashed border-gray-300 rounded-xl cursor-pointer hover:border-blue-400 transition bg-gray-100 overflow-hidden'>
+
             {preview ? (
               <>
-                <img src={preview} alt="preview" className='h-full w-full object-contain' />
+                <img src={preview} alt="preview" className='h-full w-full object-contain'/>
+
                 <button
                   type="button"
-                  onClick={(e) => { e.preventDefault(); removeImage() }}
-                  className='absolute top-2 right-2 bg-white p-1.5 rounded-full shadow'
+                  onClick={(e) => {
+                    e.preventDefault()
+                    removeImage()
+                  }}
+                  className='absolute top-2 right-2 bg-white/90 p-1.5 rounded-full shadow'
                 >
-                  <X className='w-4 h-4 text-red-500' />
+                  <X className='w-4 h-4 text-red-500'/>
                 </button>
               </>
             ) : (
               <div className='flex flex-col items-center text-gray-400'>
-                <UploadCloud className='w-7 h-7 mb-1' />
-                <p className='text-xs'>Click to Upload</p>
+                <UploadCloud className='w-8 h-8 mb-1'/>
+                <p className='text-sm'>Click to Upload</p>
+                <span className='text-xs'>PNG, JPG supported</span>
               </div>
             )}
-            <input type="file" accept="image/*" onChange={handleImageUpload} className='hidden' />
+
+            <input type="file" accept="image/*" onChange={handleImageUpload} className='hidden'/>
           </label>
         </div>
 
-        {/* Object */}
+        {/* Object Input */}
         <div>
-          <p className='text-sm font-medium'>Describe Object</p>
+          <p className='text-sm font-medium mb-1'>Describe Object</p>
           <textarea
             value={objectText}
             onChange={(e) => setObjectText(e.target.value)}
             rows={3}
-            className='w-full p-3 mt-2 border rounded-md focus:ring-2 focus:ring-blue-400'
-            placeholder='e.g., remove person, car...'
+            className='w-full p-3 text-sm border rounded-lg focus:ring-2 focus:ring-blue-400 outline-none resize-none'
+            placeholder='e.g. remove person, car, background object...'
           />
         </div>
 
@@ -144,56 +151,75 @@ const RemoveObject = () => {
         <button
           disabled={loading}
           type="submit"
-          className='w-full bg-gradient-to-r from-blue-500 to-indigo-600 text-white py-2 rounded-md flex items-center justify-center gap-2'
+          className='w-full bg-gradient-to-r from-blue-500 to-indigo-600 text-white py-2.5 rounded-lg flex items-center justify-center gap-2 shadow hover:opacity-90 transition'
         >
           {loading
-            ? <><Sparkles className='w-4 h-4 animate-spin' />Processing...</>
-            : <><ScissorsIcon className='w-4 h-4' />Remove Object</>
+            ? <span className='w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin'></span>
+            : <ScissorsIcon className='w-4 h-4'/>
           }
+          {loading ? "Processing..." : "Remove Object"}
         </button>
 
       </form>
 
-      {/* RIGHT */}
-      <div className='w-full max-w-lg p-6 bg-white rounded-xl border min-h-96 flex flex-col'>
+      {/* RIGHT PANEL */}
+      <div className='w-full max-w-lg p-6 bg-white rounded-2xl shadow-md border border-gray-200 flex flex-col min-h-[500px]'>
 
         {/* Header */}
-        <div className='flex justify-between items-center'>
+        <div className='flex justify-between items-center mb-4'>
           <div className='flex items-center gap-3'>
-            <ScissorsIcon className='w-5 text-blue-600' />
+            <div className='p-2 bg-blue-100 rounded-lg'>
+              <ScissorsIcon className='w-5 h-5 text-blue-600'/>
+            </div>
             <h1 className='text-lg font-semibold'>Processed Image</h1>
           </div>
 
-          {/* ✅ DOWNLOAD BUTTON */}
           {result && (
-            <button
-              onClick={downloadImage}
-              className='flex items-center gap-1 text-sm bg-gray-100 px-3 py-1 rounded hover:bg-gray-200'
-            >
-              <Download className='w-4' />
-              Download
-            </button>
+            <div className='flex gap-2'>
+              <button
+                onClick={downloadImage}
+                className='flex items-center gap-1 text-sm bg-gray-100 px-3 py-1.5 rounded hover:bg-gray-200'
+              >
+                <Download className='w-4'/>
+                Download
+              </button>
+
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(result)
+                  toast.success("Copied!")
+                }}
+                className='flex items-center gap-1 text-sm bg-gray-100 px-3 py-1.5 rounded hover:bg-gray-200'
+              >
+                <Copy className='w-4'/>
+                Copy
+              </button>
+            </div>
           )}
         </div>
 
         {/* Result */}
-        <div className='flex-1 flex justify-center items-center mt-4'>
+        <div className='flex-1 flex flex-col justify-center items-center gap-4'>
+
           {result ? (
             <img
               src={result}
               alt="result"
-              className='max-h-72 object-contain rounded-lg'
+              className='max-h-80 object-contain rounded-xl shadow'
               onError={() => {
                 toast.error("Failed to load image")
                 setResult(null)
               }}
             />
           ) : (
-            <div className='text-sm flex flex-col items-center gap-4 text-gray-400 text-center'>
-              <ScissorsIcon className='w-10 h-10 text-blue-300' />
-              <p>Upload image and remove object</p>
+            <div className='text-sm flex flex-col items-center gap-3 text-gray-400 text-center'>
+              <ScissorsIcon className='w-10 h-10 opacity-60'/>
+              <p>
+                Upload image and <span className='text-blue-500 font-medium'>remove object</span>
+              </p>
             </div>
           )}
+
         </div>
 
       </div>

@@ -20,12 +20,10 @@ const WriteArticle = () => {
   const [content, setContent] = useState('')
   const [loading, setLoading] = useState(false)
 
-  const {getToken} = useAuth()
+  const { getToken } = useAuth()
 
   const onSubmitHandler = async (e) => {
     e.preventDefault()
-
-   
 
     try {
       setLoading(true)
@@ -33,11 +31,10 @@ const WriteArticle = () => {
       const selectedText = articleLength.find(item => item.length === selectedLength)?.text
       const prompt = `Write an article about ${input} in ${selectedText}`
 
-      const { data } = await axios.post('/api/ai/generate-article', {
-        prompt,
-        length: selectedLength }, {
-          headers: {Authorization: `Bearer ${await getToken()}`}
-        })
+      const { data } = await axios.post('/api/ai/generate-article',
+        { prompt, length: selectedLength },
+        { headers: { Authorization: `Bearer ${await getToken()}` } }
+      )
 
       if (data.success) {
         setContent(data.content)
@@ -53,45 +50,47 @@ const WriteArticle = () => {
   }
 
   return (
-    <div className='h-full overflow-y-scroll p-6 flex items-start flex-wrap gap-4 text-slate-700'>
+    <div className='h-full overflow-y-auto p-6 flex flex-wrap gap-6 bg-gradient-to-br from-gray-50 to-gray-100'>
 
-      {/* LEFT */}
+      {/* LEFT PANEL */}
       <form
         onSubmit={onSubmitHandler}
-        className='w-full max-w-lg p-5 bg-white rounded-lg border border-gray-200 space-y-4'
+        className='w-full max-w-lg p-6 bg-white rounded-2xl shadow-md border border-gray-200 space-y-6'
       >
 
         {/* Header */}
         <div className='flex items-center gap-3'>
-          <Sparkles className='w-6 text-blue-500' />
-          <h1 className='text-xl font-semibold'>AI Article Generator</h1>
+          <div className='p-2 rounded-lg bg-blue-100'>
+            <Sparkles className='w-5 h-5 text-blue-600' />
+          </div>
+          <h1 className='text-lg font-semibold'>AI Article Generator</h1>
         </div>
 
-        {/* Topic */}
+        {/* Topic Input */}
         <div>
-          <p className='text-sm font-medium'>Topic</p>
+          <p className='text-sm font-medium mb-1'>Topic</p>
           <input
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            className='w-full p-2 px-3 mt-2 outline-none text-sm rounded-md border border-gray-300 focus:ring-2 focus:ring-blue-200'
-            placeholder='The future of artificial intelligence is...'
+            className='w-full p-3 text-sm rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-300 outline-none transition'
+            placeholder='e.g. Impact of AI on marketing jobs...'
           />
         </div>
 
-        {/* Length */}
+        {/* Length Selection */}
         <div>
-          <p className='text-sm font-medium'>Article Length</p>
+          <p className='text-sm font-medium mb-2'>Article Length</p>
 
-          <div className='flex flex-wrap gap-2 mt-2'>
+          <div className='flex flex-wrap gap-2'>
             {articleLength.map((item) => (
               <button
                 type="button"
                 key={item.length}
                 onClick={() => setSelectedLength(item.length)}
-                className={`px-3 py-1 text-sm rounded-full border transition
-                  ${selectedLength === item.length
-                    ? 'bg-blue-500 text-white border-blue-500'
+                className={`px-4 py-1.5 text-xs rounded-full border transition-all duration-200
+                ${selectedLength === item.length
+                    ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
                     : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-100'}`}
               >
                 {item.text}
@@ -104,7 +103,7 @@ const WriteArticle = () => {
         <button
           type="submit"
           disabled={loading}
-          className='w-full mt-4 bg-blue-500 text-white py-2 rounded-md hover:bg-blue-600 transition flex items-center justify-center gap-2'
+          className='w-full mt-2 bg-gradient-to-r from-blue-500 to-blue-600 text-white py-2.5 rounded-lg hover:opacity-90 transition flex items-center justify-center gap-2 shadow'
         >
           <Edit className='w-4 h-4' />
           {loading ? "Generating..." : "Generate Article"}
@@ -112,29 +111,34 @@ const WriteArticle = () => {
 
       </form>
 
-      {/* RIGHT */}
-      <div className='w-full max-w-lg p-4 bg-white rounded-lg flex flex-col border border-gray-200 min-h-96'>
+      {/* RIGHT PANEL */}
+      <div className='w-full max-w-lg p-6 bg-white rounded-2xl shadow-md border border-gray-200 flex flex-col min-h-[500px]'>
 
-        <div className='flex items-center gap-3'>
-          <Edit className='w-5 h-5 text-blue-500' />
-          <h1 className='text-xl font-semibold'>Generated Article</h1>
+        {/* Header */}
+        <div className='flex items-center gap-3 mb-4'>
+          <div className='p-2 rounded-lg bg-blue-100'>
+            <Edit className='w-5 h-5 text-blue-600' />
+          </div>
+          <h1 className='text-lg font-semibold'>Generated Article</h1>
         </div>
 
         {!content ? (
-          <div className='flex-1 flex justify-center items-center'>
-           <div className='text-sm flesx flex-col items-center gap-5 text-gray-400'>
-            <Edit className='w-9 h-9' />
-            <p>Enter a topic and click "Generate Article"</p> 
-           </div>
+          <div className='flex-1 flex flex-col justify-center items-center text-gray-400 gap-3 text-center'>
+            <Edit className='w-10 h-10 opacity-60' />
+            <p className='text-sm'>
+              Enter a topic and click <span className='font-medium text-blue-500'>Generate Article</span>
+            </p>
           </div>
         ) : (
-          <div className='mt-3 h-full overflow-y-scroll text-sm text-slate-600'>
-          <div className='reset-tw'>
+          <div className='flex-1 overflow-y-auto pr-2 custom-scrollbar'>
+
+            {/* Content Card */}
+            <div className='prose prose-sm max-w-none text-slate-700 leading-relaxed'>
               <Markdown>{content}</Markdown>
             </div>
+
           </div>
         )}
-
 
       </div>
 

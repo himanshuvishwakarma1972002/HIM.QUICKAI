@@ -1,17 +1,19 @@
-import { FileTextIcon, Sparkles, UploadCloud, X } from 'lucide-react'
+import { FileTextIcon, Sparkles, UploadCloud, X, Copy } from 'lucide-react'
 import React, { useState } from 'react'
 import axios from 'axios'
 import toast from 'react-hot-toast'
 import { useAuth } from '@clerk/react'
+import Markdown from 'react-markdown'
 
 axios.defaults.baseURL = import.meta.env.VITE_BASE_URL
 
-const ReviewResime = () => {
+const ReviewResume = () => {
 
   const [file, setFile] = useState(null)
   const [preview, setPreview] = useState(null)
   const [result, setResult] = useState('')
   const [loading, setLoading] = useState(false)
+
   const { getToken } = useAuth()
 
   const onSubmitHandler = async (e) => {
@@ -20,25 +22,31 @@ const ReviewResime = () => {
 
     try {
       setLoading(true)
+
       const formData = new FormData()
       formData.append('resume', file)
 
       const token = await getToken()
-      const { data } = await axios.post('/api/ai/resume-review', formData, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {}
-      })
+
+      const { data } = await axios.post(
+        '/api/ai/resume-review',
+        formData,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'multipart/form-data'
+          }
+        }
+      )
 
       if (data.success) {
         setResult(data.content)
       } else {
-        const message = data.message || 'Resume review failed'
-        setResult(message)
-        toast.error(message)
+        toast.error(data.message)
       }
+
     } catch (error) {
-      const message = error?.response?.data?.message || 'Something went wrong'
-      setResult(message)
-      toast.error(message)
+      toast.error(error.response?.data?.message || error.message)
     } finally {
       setLoading(false)
     }
@@ -49,6 +57,7 @@ const ReviewResime = () => {
     if (selectedFile) {
       setFile(selectedFile)
       setPreview(URL.createObjectURL(selectedFile))
+      setResult('')
     }
   }
 
@@ -60,100 +69,108 @@ const ReviewResime = () => {
   }
 
   return (
-    <div className='h-full overflow-y-scroll p-6 flex items-start flex-wrap gap-6 bg-gray-50 text-slate-700'>
-      
-      {/* Left column */}
-      <form 
+    <div className='h-full overflow-y-auto p-6 flex flex-wrap gap-6 bg-gradient-to-br from-gray-50 to-gray-100'>
+
+      {/* LEFT PANEL */}
+      <form
         onSubmit={onSubmitHandler}
-        className='w-full max-w-lg p-6 bg-white rounded-xl border border-gray-200 space-y-5 shadow-sm'
+        className='w-full max-w-lg p-6 bg-white rounded-2xl shadow-md border space-y-6'
       >
 
         {/* Header */}
         <div className='flex items-center gap-3'>
-          <Sparkles className='w-5 text-[#00DA83]'/>
-          <h1 className='text-lg font-semibold'>Resume Review</h1>
+          <div className='p-2 rounded-lg bg-green-100'>
+            <Sparkles className='w-5 h-5 text-green-600'/>
+          </div>
+          <h1 className='text-lg font-semibold'>Resume Analyzer</h1>
         </div>
 
         {/* Upload Box */}
-        <div>
-          <p className='text-sm font-medium mb-2'>Upload Resume</p>
+        <label className='relative flex flex-col items-center justify-center h-44 border-2 border-dashed rounded-xl cursor-pointer bg-gray-100 hover:border-green-400 transition'>
 
-          <label
-            htmlFor="resumeUpload"
-            className='relative flex items-center justify-center w-full h-32 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-[#00DA83] transition bg-gray-100 overflow-hidden'
-          >
-            {file ? (
-              <>
-                <div className='flex flex-col items-center justify-center text-center px-2'>
-                  <FileTextIcon className='w-8 h-8 text-[#00DA83]'/>
-                  <p className='text-xs mt-1 truncate max-w-[200px]'>{file.name}</p>
-                </div>
+          {file ? (
+            <>
+              <FileTextIcon className='w-10 h-10 text-green-500 mb-2'/>
+              <p className='text-xs text-center px-2'>{file.name}</p>
 
-                {/* Remove Button */}
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.preventDefault()
-                    removeFile()
-                  }}
-                  className='absolute top-2 right-2 z-10 bg-white/90 hover:bg-white p-1.5 rounded-full shadow'
-                >
-                  <X className='w-4 h-4 text-red-500'/>
-                </button>
-              </>
-            ) : (
-              <div className='flex flex-col items-center justify-center text-gray-400'>
-                <UploadCloud className='w-7 h-7 mb-1'/>
-                <p className='text-xs'>Upload PDF</p>
-              </div>
-            )}
+              <button
+                onClick={(e)=>{e.preventDefault(); removeFile()}}
+                className='absolute top-2 right-2 bg-white p-1 rounded-full shadow'
+              >
+                <X className='w-4 text-red-500'/>
+              </button>
+            </>
+          ) : (
+            <>
+              <UploadCloud className='w-8 text-gray-400 mb-1'/>
+              <p className='text-sm text-gray-500'>Upload Resume</p>
+              <span className='text-xs text-gray-400'>PDF only</span>
+            </>
+          )}
 
-            <input
-              id="resumeUpload"
-              type="file"
-              accept="application/pdf"
-              onChange={handleFileUpload}
-              className="hidden"
-            />
-          </label>
+          <input type="file" accept="application/pdf"
+            onChange={handleFileUpload}
+            className='hidden'/>
+        </label>
 
-          <p className='text-xs text-gray-500 mt-2'>
-            Supports PDF resume only.
-          </p>
-        </div>
-
-        {/* Submit */}
+        {/* Submit Button */}
         <button
           type="submit"
           disabled={loading}
-          className='w-full bg-gradient-to-r from-[#00DA83] to-[#00B86B] text-white py-2 rounded-md hover:opacity-90 transition flex items-center justify-center gap-2'
+          className='w-full bg-gradient-to-r from-green-500 to-emerald-600 text-white py-2.5 rounded-lg flex items-center justify-center gap-2 shadow'
         >
-          <FileTextIcon className='w-4 h-4'/>
-          {loading ? 'Reviewing...' : 'Review Resume'}
+          {loading
+            ? <span className='w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin'></span>
+            : <FileTextIcon className='w-4 h-4'/>
+          }
+          {loading ? "Analyzing..." : "Review Resume"}
         </button>
 
       </form>
 
-      {/* Right column */}
-      <div className='w-full max-w-lg p-6 bg-white rounded-xl border border-gray-200 min-h-96 flex flex-col'>
-        
-        <div className='flex items-center gap-3'>
-          <FileTextIcon className='w-5 h-5 text-[#00DA83]'/>
-          <h1 className='text-lg font-semibold'>Analysis Results</h1>
-        </div>
+      {/* RIGHT PANEL */}
+      <div className='w-full max-w-lg p-6 bg-white rounded-2xl shadow-md border flex flex-col min-h-[520px]'>
 
-        <div className='flex-1 flex justify-center items-center'>
-          {result ? (
-            <p className='w-full h-80 overflow-y-auto rounded-md border p-3 text-sm whitespace-pre-line'>
-              {result}
-            </p>
-          ) : (
-            <div className='text-sm flex flex-col items-center gap-4 text-gray-400 text-center'>
-              <FileTextIcon className='w-10 h-10'/>
-              <p>Upload a resume and click "Review Resume" to see written feedback</p>
+        {/* Header */}
+        <div className='flex justify-between items-center mb-4'>
+          <div className='flex items-center gap-3'>
+            <div className='p-2 bg-green-100 rounded-lg'>
+              <FileTextIcon className='w-5 h-5 text-green-600'/>
             </div>
+            <h1 className='text-lg font-semibold'>Analysis</h1>
+          </div>
+
+          {result && (
+            <button
+              onClick={() => {
+                navigator.clipboard.writeText(result)
+                toast.success("Copied!")
+              }}
+              className='flex items-center gap-1 text-sm bg-gray-100 px-3 py-1.5 rounded hover:bg-gray-200'
+            >
+              <Copy className='w-4'/>
+              Copy
+            </button>
           )}
         </div>
+
+        {/* Content */}
+        {!result ? (
+          <div className='flex-1 flex flex-col justify-center items-center text-gray-400 text-center gap-3'>
+            <FileTextIcon className='w-10 h-10 opacity-60'/>
+            <p className='text-sm'>
+              Upload your resume and click <span className='text-green-500 font-medium'>Review Resume</span>
+            </p>
+          </div>
+        ) : (
+          <div className='flex-1 overflow-y-auto pr-2 custom-scrollbar'>
+
+            <div className='prose prose-sm max-w-none text-slate-700 leading-relaxed'>
+              <Markdown>{result}</Markdown>
+            </div>
+
+          </div>
+        )}
 
       </div>
 
@@ -161,4 +178,4 @@ const ReviewResime = () => {
   )
 }
 
-export default ReviewResime
+export default ReviewResume
