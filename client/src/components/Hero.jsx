@@ -17,7 +17,7 @@ const Hero = () => {
         </h1>
 
         <p className="mt-4 max-w-xs sm:max-w-md md:max-w-lg lg:max-w-xl mx-auto text-gray-600">
-          Generate articles, blog titles, images, and more with our AI tools.
+          Generate articles, blog titles, images, and more with Him.Ai tools.
           The best way to create content with AI. <br />
           Transform your ideas into reality.
         </p>

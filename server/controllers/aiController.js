@@ -391,42 +391,61 @@ export const removeImageObject = async (req, res) => {
 // ================== RESUME REVIEW ==================
 export const resumeReview = async (req, res) => {
   try {
+    const { userId } = req.auth(); // ✅ get userId
+
     if (!req.file) {
       return res.json({ success: false, message: "Please upload a resume PDF" });
     }
 
+    // ✅ Read PDF
     const buffer = fs.readFileSync(req.file.path);
     const parser = new PDFParse({ data: buffer });
     const data = await parser.getText();
     await parser.destroy();
 
     let content = "";
+
     try {
-      const response = await createChatCompletion([
-        {
-          role: "user",
-          content: `Review this resume and give constructive feedback on strengths, weaknesses, and improvements:\n\n${data.text}`,
-        },
-      ], 1000);
+      const response = await createChatCompletion(
+        [
+          {
+            role: "user",
+            content: `Review this resume and give constructive feedback on strengths, weaknesses, and improvements:\n\n${data.text}`,
+          },
+        ],
+        1000
+      );
+
       content = response.choices[0].message.content;
+
     } catch (aiError) {
       console.log("RESUME AI PROVIDER ERROR:", aiError?.status, aiError?.message);
       content = buildResumeFallbackReview(data.text);
     }
 
+    // ✅ SAVE TO DATABASE (🔥 THIS WAS MISSING)
+    await sql`
+      INSERT INTO creations (user_id, prompt, content, type)
+      VALUES (${userId}, ${"Resume Review"}, ${content}, 'resume-review')
+    `;
+
+    // ✅ DELETE TEMP FILE
     if (req.file?.path && fs.existsSync(req.file.path)) {
       fs.unlinkSync(req.file.path);
     }
 
+    // ✅ RESPONSE
     res.json({
       success: true,
       content,
     });
 
-    
-
   } catch (error) {
     console.log("RESUME ERROR:", error.message);
-    res.json({ success: false, message: error.message || "Resume review failed" });
+
+    res.json({
+      success: false,
+      message: error.message || "Resume review failed",
+    });
   }
 };

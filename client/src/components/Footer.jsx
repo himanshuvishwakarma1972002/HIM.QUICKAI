@@ -22,7 +22,7 @@ const Footer = () => {
           />
 
           <p className="mt-6 text-sm">
-           Experience the power of AI with QuickAI. <br /> Transform your content creation with our suite of premium AI tools. Write articles, generate images, and enhance your workflow.  
+           Experience the power of AI with Him.Ai. <br /> Transform your content creation with our suite of premium AI tools. Write articles, generate images, and enhance your workflow.  
           </p>
         </div>
 
