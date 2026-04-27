@@ -15,7 +15,6 @@
     "@clerk/express": "^2.1.4",
     "@google/generative-ai": "^0.24.1",
     "@neondatabase/serverless": "^1.0.2",
-    "@tailwindcss/typography": "^0.5.19",
     "axios": "^1.15.0",
     "cloudinary": "^2.9.0",
     "cors": "^2.8.6",
@@ -25,8 +24,7 @@
     "multer": "^2.1.1",
     "openai": "^6.34.0",
     "pdf-parse": "^2.4.5",
-    "postgres": "^3.4.9",
-    "react-markdown": "^10.1.0"
+    "postgres": "^3.4.9"
   },
   "devDependencies": {
     "nodemon": "^3.1.14"

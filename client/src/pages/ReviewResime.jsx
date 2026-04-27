@@ -16,9 +16,13 @@ const ReviewResume = () => {
 
   const { getToken } = useAuth()
 
+  // 🔥 SUBMIT HANDLER
   const onSubmitHandler = async (e) => {
     e.preventDefault()
-    if (!file) return toast.error('Please upload a resume PDF')
+
+    if (!file) {
+      return toast.error('Please upload a resume PDF')
+    }
 
     try {
       setLoading(true)
@@ -52,15 +56,23 @@ const ReviewResume = () => {
     }
   }
 
+  // 📂 FILE UPLOAD
   const handleFileUpload = (e) => {
     const selectedFile = e.target.files[0]
+
     if (selectedFile) {
+      if (selectedFile.type !== 'application/pdf') {
+        toast.error('Only PDF files are allowed')
+        return
+      }
+
       setFile(selectedFile)
       setPreview(URL.createObjectURL(selectedFile))
       setResult('')
     }
   }
 
+  // ❌ REMOVE FILE
   const removeFile = () => {
     if (preview) URL.revokeObjectURL(preview)
     setFile(null)
@@ -71,10 +83,10 @@ const ReviewResume = () => {
   return (
     <div className='h-full overflow-y-auto p-6 flex flex-wrap gap-6 bg-gradient-to-br from-gray-50 to-gray-100'>
 
-      {/* LEFT PANEL */}
+      {/* ================= LEFT PANEL ================= */}
       <form
         onSubmit={onSubmitHandler}
-        className='w-full max-w-lg p-6 bg-white rounded-2xl shadow-md border space-y-6'
+        className='w-full max-w-lg p-6 bg-white rounded-2xl shadow-md border border-gray-200 space-y-6'
       >
 
         {/* Header */}
@@ -82,7 +94,7 @@ const ReviewResume = () => {
           <div className='p-2 rounded-lg bg-green-100'>
             <Sparkles className='w-5 h-5 text-green-600'/>
           </div>
-          <h1 className='text-lg font-semibold'>Resume Analyzer</h1>
+          <h1 className='text-lg font-semibold'>AI Resume Analyzer</h1>
         </div>
 
         {/* Upload Box */}
@@ -94,10 +106,13 @@ const ReviewResume = () => {
               <p className='text-xs text-center px-2'>{file.name}</p>
 
               <button
-                onClick={(e)=>{e.preventDefault(); removeFile()}}
-                className='absolute top-2 right-2 bg-white p-1 rounded-full shadow'
+                onClick={(e) => {
+                  e.preventDefault()
+                  removeFile()
+                }}
+                className='absolute top-2 right-2 bg-white/90 p-1.5 rounded-full shadow'
               >
-                <X className='w-4 text-red-500'/>
+                <X className='w-4 h-4 text-red-500'/>
               </button>
             </>
           ) : (
@@ -108,16 +123,19 @@ const ReviewResume = () => {
             </>
           )}
 
-          <input type="file" accept="application/pdf"
+          <input
+            type="file"
+            accept="application/pdf"
             onChange={handleFileUpload}
-            className='hidden'/>
+            className='hidden'
+          />
         </label>
 
         {/* Submit Button */}
         <button
           type="submit"
           disabled={loading}
-          className='w-full bg-gradient-to-r from-green-500 to-emerald-600 text-white py-2.5 rounded-lg flex items-center justify-center gap-2 shadow'
+          className='w-full bg-gradient-to-r from-green-500 to-emerald-600 text-white py-2.5 rounded-lg hover:opacity-90 transition flex items-center justify-center gap-2 shadow'
         >
           {loading
             ? <span className='w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin'></span>
@@ -128,13 +146,13 @@ const ReviewResume = () => {
 
       </form>
 
-      {/* RIGHT PANEL */}
-      <div className='w-full max-w-lg p-6 bg-white rounded-2xl shadow-md border flex flex-col min-h-[520px]'>
+      {/* ================= RIGHT PANEL ================= */}
+      <div className='w-full max-w-lg p-6 bg-white rounded-2xl shadow-md border border-gray-200 flex flex-col min-h-[520px]'>
 
         {/* Header */}
-        <div className='flex justify-between items-center mb-4'>
+        <div className='flex items-center justify-between mb-4'>
           <div className='flex items-center gap-3'>
-            <div className='p-2 bg-green-100 rounded-lg'>
+            <div className='p-2 rounded-lg bg-green-100'>
               <FileTextIcon className='w-5 h-5 text-green-600'/>
             </div>
             <h1 className='text-lg font-semibold'>Analysis</h1>
@@ -156,15 +174,17 @@ const ReviewResume = () => {
 
         {/* Content */}
         {!result ? (
-          <div className='flex-1 flex flex-col justify-center items-center text-gray-400 text-center gap-3'>
+          <div className='flex-1 flex flex-col justify-center items-center text-gray-400 gap-3 text-center'>
             <FileTextIcon className='w-10 h-10 opacity-60'/>
             <p className='text-sm'>
-              Upload your resume and click <span className='text-green-500 font-medium'>Review Resume</span>
+              Upload your resume and click{' '}
+              <span className='font-medium text-green-500'>Review Resume</span>
             </p>
           </div>
         ) : (
-          <div className='flex-1 overflow-y-auto pr-2 custom-scrollbar'>
+          <div className='flex-1 overflow-y-auto pr-2'>
 
+            {/* Markdown Content */}
             <div className='prose prose-sm max-w-none text-slate-700 leading-relaxed'>
               <Markdown>{result}</Markdown>
             </div>
