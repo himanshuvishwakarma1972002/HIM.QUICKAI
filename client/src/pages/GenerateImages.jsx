@@ -51,7 +51,7 @@ const GenerateImages = () => {
       {/* LEFT PANEL */}
       <form
         onSubmit={onSubmitHandler}
-        className='w-full max-w-lg p-6 bg-white rounded-2xl shadow-md border border-gray-200 space-y-6'
+        className='w-full lg:w-[420px] p-6 bg-white rounded-2xl shadow-md border border-gray-200 space-y-6'
       >
 
         {/* Header */}
@@ -84,9 +84,9 @@ const GenerateImages = () => {
                 type="button"
                 key={item}
                 onClick={() => setSelectedCategory(item)}
-                className={`px-4 py-1.5 text-xs rounded-full border transition-all
+                className={`px-4 py-1.5 text-xs rounded-full border transition-all duration-200
                   ${selectedCategory === item
-                    ? 'bg-green-600 text-white border-green-600 shadow'
+                    ? 'bg-green-600 text-white border-green-600 shadow-sm'
                     : 'bg-white text-gray-600 border-gray-300 hover:bg-green-50'}`}
               >
                 {item}
@@ -127,7 +127,7 @@ const GenerateImages = () => {
       </form>
 
       {/* RIGHT PANEL */}
-      <div className='w-full max-w-lg p-6 bg-white rounded-2xl shadow-md border border-gray-200 flex flex-col min-h-[500px]'>
+      <div className='flex-1 min-w-[300px] p-6 bg-white rounded-2xl shadow-md border border-gray-200 flex flex-col min-h-[600px]'>
 
         {/* Header */}
         <div className='flex items-center gap-3 mb-4'>
@@ -144,17 +144,17 @@ const GenerateImages = () => {
               <img
                 src={imageUrl}
                 alt='Generated'
-                className='max-w-full max-h-80 rounded-xl object-contain shadow'
+                className='max-w-full max-h-[400px] rounded-xl object-contain shadow'
               />
 
               {/* Actions */}
-              <div className='flex gap-3 mt-2'>
-                
+              <div className='flex gap-3 mt-3 flex-wrap justify-center'>
+
                 {/* Download */}
                 <a
                   href={imageUrl}
                   download
-                  className='flex items-center gap-2 px-3 py-1.5 text-sm bg-gray-100 hover:bg-gray-200 rounded-md transition'
+                  className='flex items-center gap-2 px-4 py-2 text-sm bg-gray-100 hover:bg-gray-200 rounded-lg transition'
                 >
                   <Download className='w-4 h-4' />
                   Download
@@ -166,7 +166,7 @@ const GenerateImages = () => {
                     navigator.clipboard.writeText(imageUrl)
                     toast.success("Image URL copied!")
                   }}
-                  className='flex items-center gap-2 px-3 py-1.5 text-sm bg-gray-100 hover:bg-gray-200 rounded-md transition'
+                  className='flex items-center gap-2 px-4 py-2 text-sm bg-gray-100 hover:bg-gray-200 rounded-lg transition'
                 >
                   <Copy className='w-4 h-4' />
                   Copy URL

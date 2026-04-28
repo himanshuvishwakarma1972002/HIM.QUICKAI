@@ -72,7 +72,7 @@ const RemoveBackground = () => {
       {/* LEFT PANEL */}
       <form
         onSubmit={onSubmitHandler}
-        className='w-full max-w-lg p-6 bg-white rounded-2xl shadow-md border border-gray-200 space-y-6'
+        className='w-full lg:w-[420px] p-6 bg-white rounded-2xl shadow-md border border-gray-200 space-y-6'
       >
 
         {/* Header */}
@@ -89,7 +89,7 @@ const RemoveBackground = () => {
 
           <label
             htmlFor="bgUpload"
-            className='relative flex items-center justify-center w-full h-40 border-2 border-dashed border-gray-300 rounded-xl cursor-pointer hover:border-red-400 transition bg-gray-100 overflow-hidden'
+            className='relative flex items-center justify-center w-full h-44 border-2 border-dashed border-gray-300 rounded-xl cursor-pointer hover:border-red-400 transition bg-gray-100 overflow-hidden'
           >
             {preview ? (
               <>
@@ -108,7 +108,7 @@ const RemoveBackground = () => {
               </>
             ) : (
               <div className='flex flex-col items-center text-gray-400'>
-                <UploadCloud className='w-8 h-8 mb-1'/>
+                <UploadCloud className='w-9 h-9 mb-2'/>
                 <p className='text-sm'>Click to Upload</p>
                 <span className='text-xs'>PNG, JPG supported</span>
               </div>
@@ -140,7 +140,7 @@ const RemoveBackground = () => {
       </form>
 
       {/* RIGHT PANEL */}
-      <div className='w-full max-w-lg p-6 bg-white rounded-2xl shadow-md border border-gray-200 flex flex-col min-h-[500px]'>
+      <div className='flex-1 min-w-[300px] p-6 bg-white rounded-2xl shadow-md border border-gray-200 flex flex-col min-h-[600px]'>
 
         {/* Header */}
         <div className='flex items-center gap-3 mb-4'>
@@ -157,17 +157,17 @@ const RemoveBackground = () => {
               <img
                 src={result}
                 alt="result"
-                className='max-h-80 object-contain rounded-xl shadow'
+                className='max-h-[400px] object-contain rounded-xl shadow'
               />
 
               {/* Actions */}
-              <div className='flex gap-3'>
+              <div className='flex gap-3 mt-3 flex-wrap justify-center'>
 
                 {/* Download */}
                 <a
                   href={result}
                   download
-                  className='flex items-center gap-2 px-3 py-1.5 text-sm bg-gray-100 hover:bg-gray-200 rounded-md transition'
+                  className='flex items-center gap-2 px-4 py-2 text-sm bg-gray-100 hover:bg-gray-200 rounded-lg transition'
                 >
                   <Download className='w-4 h-4'/>
                   Download
@@ -179,7 +179,7 @@ const RemoveBackground = () => {
                     navigator.clipboard.writeText(result)
                     toast.success("Copied!")
                   }}
-                  className='flex items-center gap-2 px-3 py-1.5 text-sm bg-gray-100 hover:bg-gray-200 rounded-md transition'
+                  className='flex items-center gap-2 px-4 py-2 text-sm bg-gray-100 hover:bg-gray-200 rounded-lg transition'
                 >
                   <Copy className='w-4 h-4'/>
                   Copy URL

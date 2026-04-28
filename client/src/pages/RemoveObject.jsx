@@ -16,7 +16,6 @@ const RemoveObject = () => {
 
   const { getToken } = useAuth()
 
-  // ✅ SUBMIT
   const onSubmitHandler = async (e) => {
     e.preventDefault()
 
@@ -55,7 +54,6 @@ const RemoveObject = () => {
     }
   }
 
-  // ✅ IMAGE UPLOAD
   const handleImageUpload = (e) => {
     const file = e.target.files[0]
     if (file) {
@@ -65,7 +63,6 @@ const RemoveObject = () => {
     }
   }
 
-  // ✅ REMOVE IMAGE
   const removeImage = () => {
     if (preview) URL.revokeObjectURL(preview)
     setImage(null)
@@ -73,7 +70,6 @@ const RemoveObject = () => {
     setResult(null)
   }
 
-  // ✅ DOWNLOAD
   const downloadImage = () => {
     if (!result) return
     const link = document.createElement('a')
@@ -91,7 +87,7 @@ const RemoveObject = () => {
       {/* LEFT PANEL */}
       <form
         onSubmit={onSubmitHandler}
-        className='w-full max-w-lg p-6 bg-white rounded-2xl shadow-md border border-gray-200 space-y-6'
+        className='w-full lg:w-[420px] p-6 bg-white rounded-2xl shadow-md border border-gray-200 space-y-6'
       >
 
         {/* Header */}
@@ -106,7 +102,7 @@ const RemoveObject = () => {
         <div>
           <p className='text-sm font-medium mb-2'>Upload Image</p>
 
-          <label className='relative flex items-center justify-center w-full h-40 border-2 border-dashed border-gray-300 rounded-xl cursor-pointer hover:border-blue-400 transition bg-gray-100 overflow-hidden'>
+          <label className='relative flex items-center justify-center w-full h-44 border-2 border-dashed border-gray-300 rounded-xl cursor-pointer hover:border-blue-400 transition bg-gray-100 overflow-hidden'>
 
             {preview ? (
               <>
@@ -118,14 +114,14 @@ const RemoveObject = () => {
                     e.preventDefault()
                     removeImage()
                   }}
-                  className='absolute top-2 right-2 bg-white/90 p-1.5 rounded-full shadow'
+                  className='absolute top-2 right-2 bg-white/90 hover:bg-white p-1.5 rounded-full shadow'
                 >
                   <X className='w-4 h-4 text-red-500'/>
                 </button>
               </>
             ) : (
               <div className='flex flex-col items-center text-gray-400'>
-                <UploadCloud className='w-8 h-8 mb-1'/>
+                <UploadCloud className='w-9 h-9 mb-2'/>
                 <p className='text-sm'>Click to Upload</p>
                 <span className='text-xs'>PNG, JPG supported</span>
               </div>
@@ -142,8 +138,9 @@ const RemoveObject = () => {
             value={objectText}
             onChange={(e) => setObjectText(e.target.value)}
             rows={3}
-            className='w-full p-3 text-sm border rounded-lg focus:ring-2 focus:ring-blue-400 outline-none resize-none'
+            className='w-full p-3 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-400 outline-none resize-none transition'
             placeholder='e.g. remove person, car, background object...'
+            required
           />
         </div>
 
@@ -163,10 +160,10 @@ const RemoveObject = () => {
       </form>
 
       {/* RIGHT PANEL */}
-      <div className='w-full max-w-lg p-6 bg-white rounded-2xl shadow-md border border-gray-200 flex flex-col min-h-[500px]'>
+      <div className='flex-1 min-w-[300px] p-6 bg-white rounded-2xl shadow-md border border-gray-200 flex flex-col min-h-[600px]'>
 
         {/* Header */}
-        <div className='flex justify-between items-center mb-4'>
+        <div className='flex justify-between items-center mb-4 flex-wrap gap-2'>
           <div className='flex items-center gap-3'>
             <div className='p-2 bg-blue-100 rounded-lg'>
               <ScissorsIcon className='w-5 h-5 text-blue-600'/>
@@ -175,10 +172,10 @@ const RemoveObject = () => {
           </div>
 
           {result && (
-            <div className='flex gap-2'>
+            <div className='flex gap-2 flex-wrap'>
               <button
                 onClick={downloadImage}
-                className='flex items-center gap-1 text-sm bg-gray-100 px-3 py-1.5 rounded hover:bg-gray-200'
+                className='flex items-center gap-2 px-4 py-2 text-sm bg-gray-100 hover:bg-gray-200 rounded-lg transition'
               >
                 <Download className='w-4'/>
                 Download
@@ -189,7 +186,7 @@ const RemoveObject = () => {
                   navigator.clipboard.writeText(result)
                   toast.success("Copied!")
                 }}
-                className='flex items-center gap-1 text-sm bg-gray-100 px-3 py-1.5 rounded hover:bg-gray-200'
+                className='flex items-center gap-2 px-4 py-2 text-sm bg-gray-100 hover:bg-gray-200 rounded-lg transition'
               >
                 <Copy className='w-4'/>
                 Copy
@@ -205,7 +202,7 @@ const RemoveObject = () => {
             <img
               src={result}
               alt="result"
-              className='max-h-80 object-contain rounded-xl shadow'
+              className='max-h-[400px] object-contain rounded-xl shadow'
               onError={() => {
                 toast.error("Failed to load image")
                 setResult(null)

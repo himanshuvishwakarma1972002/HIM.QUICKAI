@@ -63,7 +63,7 @@ const BlogTitles = () => {
       {/* LEFT PANEL */}
       <form
         onSubmit={onSubmitHandler}
-        className='w-full max-w-lg p-6 bg-white rounded-2xl shadow-md border border-gray-200 space-y-6'
+        className='w-full lg:w-[420px] p-6 bg-white rounded-2xl shadow-md border border-gray-200 space-y-6'
       >
 
         {/* Header */}
@@ -124,7 +124,7 @@ const BlogTitles = () => {
       </form>
 
       {/* RIGHT PANEL */}
-      <div className='w-full max-w-lg p-6 bg-white rounded-2xl shadow-md border border-gray-200 flex flex-col min-h-[500px]'>
+      <div className='flex-1 min-w-[300px] p-6 bg-white rounded-2xl shadow-md border border-gray-200 flex flex-col min-h-[600px]'>
 
         {/* Header */}
         <div className='flex items-center gap-3 mb-4'>
@@ -142,13 +142,13 @@ const BlogTitles = () => {
             </p>
           </div>
         ) : (
-          <div className='flex-1 overflow-y-auto pr-2 custom-scrollbar'>
+          <div className='flex-1 overflow-y-auto pr-3 custom-scrollbar'>
 
             <ul className='space-y-3'>
               {titles.map((title, i) => (
                 <li
                   key={i}
-                  className='p-3 bg-gray-50 hover:bg-purple-50 transition rounded-lg border text-sm cursor-pointer'
+                  className='p-4 bg-gray-50 hover:bg-purple-50 transition rounded-lg border text-sm cursor-pointer hover:shadow-sm'
                 >
                   {title}
                 </li>
