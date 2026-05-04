@@ -12,7 +12,7 @@ import OpenAI from "openai";
 
 const AI = new OpenAI({
     apiKey: process.env.GEMINI_API_KEY,
-    baseURL: "https://generativelanguage.googleapis.com/v1beta/openai"
+    baseURL: "https://generativelanguage.googleapis.com/v1beta"
 });
 const GEMINI_MODEL = (process.env.GEMINI_MODEL || "gemini-3-flash-preview").replace(/"/g, "").trim();
 const FALLBACK_MODELS = [...new Set([
