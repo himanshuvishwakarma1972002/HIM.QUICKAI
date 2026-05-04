@@ -41,15 +41,24 @@ export const toggleLikeCreation = async (req, res) => {
       SELECT * FROM creations WHERE id = ${id}
     `;
 
-    const likes = creation.likes || [];
+    if (!creation) {
+      return res.json({ success: false, message: "Creation not found" });
+    }
+
+    const likes = Array.isArray(creation.likes) ? creation.likes : [];
     const user = userId.toString();
 
-    let updated = likes.includes(user)
+    const updated = likes.includes(user)
       ? likes.filter(u => u !== user)
       : [...likes, user];
 
+    // TEXT[] ko postgres array literal string me convert karo
+    const arrayLiteral = '{' + updated.map(u => `"${u}"`).join(',') + '}';
+
     await sql`
-      UPDATE creations SET likes = ${updated} WHERE id = ${id}
+      UPDATE creations 
+      SET likes = ${arrayLiteral}::text[]
+      WHERE id = ${id}
     `;
 
     res.json({ success: true });
