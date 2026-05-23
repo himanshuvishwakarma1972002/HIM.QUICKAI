@@ -1,86 +1,372 @@
-import React, { useEffect, useState } from 'react'
-import { Gem, Sparkles } from 'lucide-react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
+import {
+  Gem,
+  Sparkles,
+  Search,
+  Filter,
+  Image,
+  FileText,
+  Hash,
+  Loader2,
+  ArrowRight,
+  Calendar,
+  Layers,
+} from 'lucide-react'
+import { Link } from 'react-router-dom'
 import CreationItem from '../components/CreationItem'
 import { useUser, useAuth } from '@clerk/react'
 import axios from 'axios'
 import toast from 'react-hot-toast'
+import { AiToolsData } from '../assets/assets'
+
+axios.defaults.baseURL = import.meta.env.VITE_BASE_URL
+
+const TYPE_FILTERS = [
+  { id: 'all', label: 'All' },
+  { id: 'article', label: 'Articles' },
+  { id: 'blog-title', label: 'Blog Titles' },
+  { id: 'image', label: 'Images' },
+]
+
+const typeIcons = {
+  article: FileText,
+  'blog-title': Hash,
+  image: Image,
+}
+
+const StatCard = ({ title, value, subtitle, icon: Icon, gradient, delay = 0 }) => (
+  <motion.div
+    initial={{ opacity: 0, y: 16 }}
+    animate={{ opacity: 1, y: 0 }}
+    transition={{ delay, duration: 0.4 }}
+    whileHover={{ y: -4, transition: { duration: 0.2 } }}
+    className="flex justify-between items-center min-w-[260px] flex-1 p-5 bg-white rounded-2xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow"
+  >
+    <div className="text-slate-600">
+      <p className="text-sm text-gray-500">{title}</p>
+      <h2 className="text-2xl font-bold text-slate-800 mt-1">{value}</h2>
+      {subtitle && <p className="text-xs text-gray-400 mt-1">{subtitle}</p>}
+    </div>
+    <div
+      className="w-12 h-12 rounded-xl text-white flex justify-center items-center shadow-lg"
+      style={{ background: `linear-gradient(135deg, ${gradient.from}, ${gradient.to})` }}
+    >
+      <Icon className="w-5 h-5" />
+    </div>
+  </motion.div>
+)
+
+const DashboardSkeleton = () => (
+  <div className="space-y-6 animate-pulse">
+    <div className="h-24 bg-gray-200 rounded-2xl" />
+    <div className="grid sm:grid-cols-2 xl:grid-cols-4 gap-4">
+      {[1, 2, 3, 4].map((i) => (
+        <div key={i} className="h-28 bg-gray-200 rounded-2xl" />
+      ))}
+    </div>
+    <div className="space-y-3">
+      {[1, 2, 3].map((i) => (
+        <div key={i} className="h-20 bg-gray-200 rounded-xl" />
+      ))}
+    </div>
+  </div>
+)
 
 const Dashboard = () => {
-
   const [creations, setCreations] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
+  const [search, setSearch] = useState('')
+  const [typeFilter, setTypeFilter] = useState('all')
   const { user, isLoaded } = useUser()
   const { getToken } = useAuth()
+  const isFetchingRef = useRef(false)
+  const lastFetchedUserIdRef = useRef(null)
 
-  const getDashboardData = async () => {
+  const getDashboardData = useCallback(async ({ isRefresh = false } = {}) => {
+    if (isFetchingRef.current) return
+
+    isFetchingRef.current = true
+    if (isRefresh) setRefreshing(true)
+    else setLoading(true)
+
     try {
+      const token = await getToken()
       const { data } = await axios.get('/api/user/get-user-creations', {
-        headers: { Authorization: `Bearer ${await getToken()}` }
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
       })
       if (data.success) {
-        setCreations(data.creations)
+        setCreations(data.creations || [])
+        lastFetchedUserIdRef.current = user?.id ?? null
       } else {
         toast.error(data.message)
       }
     } catch (error) {
-      toast.error(error.message)
+      const status = error?.response?.status
+      const message = error?.response?.data?.message || error.message
+      if (status === 429) {
+        toast.error('Too many requests. Please wait a moment and refresh.')
+      } else {
+        toast.error(message)
+      }
+    } finally {
+      setLoading(false)
+      setRefreshing(false)
+      isFetchingRef.current = false
     }
-  }
+  }, [getToken, user?.id])
 
   useEffect(() => {
-    if (isLoaded && user) {
-      getDashboardData()
-    }
-  }, [isLoaded, user])
+    if (!isLoaded || !user?.id) return
+    if (lastFetchedUserIdRef.current === user.id) return
+
+    getDashboardData()
+  }, [isLoaded, user?.id])
 
   const userPlan = user?.publicMetadata?.plan?.toLowerCase() || 'free'
+  const firstName = user?.firstName || user?.username || 'Creator'
+
+  const stats = useMemo(() => {
+    const byType = creations.reduce((acc, item) => {
+      const key = item?.type || 'other'
+      acc[key] = (acc[key] || 0) + 1
+      return acc
+    }, {})
+
+    const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000
+    const thisWeek = creations.filter(
+      (c) => c.created_at && new Date(c.created_at).getTime() > weekAgo
+    ).length
+
+    return { byType, thisWeek }
+  }, [creations])
+
+  const filteredCreations = useMemo(() => {
+    const query = search.trim().toLowerCase()
+    return creations.filter((item) => {
+      const matchesType = typeFilter === 'all' || item.type === typeFilter
+      const matchesSearch =
+        !query ||
+        item.prompt?.toLowerCase().includes(query) ||
+        item.type?.toLowerCase().includes(query) ||
+        item.content?.toLowerCase().includes(query)
+      return matchesType && matchesSearch
+    })
+  }, [creations, search, typeFilter])
 
   if (!isLoaded) return null
 
   return (
-    <div className='h-full overflow-y-scroll p-6'> 
-
-      <div className='flex justify-start gap-4 flex-wrap'>
-
-        {/* Total Creations card */}
-        <div className='flex justify-between items-center w-72 p-4 px-6 bg-white rounded-xl border border-gray-200'>
-          <div className='text-slate-600'>
-            <p className='text-sm'>Total Creations</p>
-            <h2 className='text-xl font-semibold'>{creations.length}</h2>
+    <div className="h-full overflow-y-auto p-4 sm:p-6 bg-gradient-to-b from-gray-50 to-white">
+      <div className="max-w-6xl mx-auto space-y-8">
+        {/* Welcome header */}
+        <motion.div
+          initial={{ opacity: 0, y: -12 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-purple-600 via-violet-600 to-blue-600 p-6 sm:p-8 text-white shadow-lg"
+        >
+          <div className="absolute -right-8 -top-8 w-40 h-40 bg-white/10 rounded-full blur-2xl" />
+          <div className="absolute -left-4 -bottom-4 w-32 h-32 bg-white/10 rounded-full blur-xl" />
+          <div className="relative z-10">
+            <p className="text-purple-100 text-sm font-medium">Welcome back</p>
+            <h1 className="text-2xl sm:text-3xl font-bold mt-1">
+              Hey, {firstName} 👋
+            </h1>
+            <p className="text-purple-100/90 mt-2 max-w-lg text-sm sm:text-base">
+              Track your AI creations, monitor usage, and jump into tools from one place.
+            </p>
           </div>
-          <div className='w-10 h-10 rounded-lg bg-gradient-to-br from-[#3588F2] to-[#0BB0D7] text-white flex justify-center items-center'>
-            <Sparkles className='w-5 text-white'/>
-          </div>
-        </div>
+        </motion.div>
 
-        {/* Active Plan card */}
-        <div className='flex justify-between items-center w-72 p-4 px-6 bg-white rounded-xl border border-gray-200'>
-          <div className='text-slate-600'>
-            <p className='text-sm'>Active Plan</p>
-            <h2 className='text-xl font-semibold'>
-              <span className={userPlan === 'premium' ? 'text-green-600' : 'text-gray-500'}>
-                {userPlan === 'premium' ? 'Premium' : 'Free'}
-              </span>
-            </h2>
-          </div>
-          <div className='w-10 h-10 rounded-lg bg-gradient-to-br from-[#FF61C5] to-[#9E53EE] text-white flex justify-center items-center'>
-            <Gem className='w-5 text-white'/>
-          </div>
-        </div>
-
-      </div>
-
-      {/* Recent Creations */}
-      <div className='space-y-3'>
-        <p className='mt-6 mb-4'>Recent Creations</p>
-        {creations.length === 0 ? (
-          <p className='text-sm text-gray-400'>No creations yet. Start by using one of the AI tools!</p>
+        {loading ? (
+          <DashboardSkeleton />
         ) : (
-          creations.map((item) => (
-            <CreationItem key={item.id} item={item} />
-          ))
+          <>
+            {/* Stats grid */}
+            <div className="grid sm:grid-cols-2 xl:grid-cols-4 gap-4">
+              <StatCard
+                title="Total Creations"
+                value={creations.length}
+                subtitle="All time"
+                icon={Sparkles}
+                gradient={{ from: '#3588F2', to: '#0BB0D7' }}
+                delay={0.1}
+              />
+              <StatCard
+                title="This Week"
+                value={stats.thisWeek}
+                subtitle="Last 7 days"
+                icon={Calendar}
+                gradient={{ from: '#20C363', to: '#11B97E' }}
+                delay={0.15}
+              />
+              <StatCard
+                title="Content Types"
+                value={Object.keys(stats.byType).length}
+                subtitle="Unique categories"
+                icon={Layers}
+                gradient={{ from: '#F76C1C', to: '#F04A3C' }}
+                delay={0.2}
+              />
+              <StatCard
+                title="Active Plan"
+                value={userPlan === 'premium' ? 'Premium' : 'Free'}
+                subtitle={userPlan === 'premium' ? 'Unlimited access' : 'Upgrade anytime'}
+                icon={Gem}
+                gradient={{ from: '#FF61C5', to: '#9E53EE' }}
+                delay={0.25}
+              />
+            </div>
+
+            {/* Quick actions */}
+            <motion.section
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.3 }}
+            >
+              <h2 className="text-lg font-semibold text-slate-800 mb-4">Quick Actions</h2>
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+                {AiToolsData.map((tool, i) => (
+                  <motion.div
+                    key={tool.path}
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ delay: 0.35 + i * 0.05 }}
+                    whileHover={{ scale: 1.03 }}
+                    whileTap={{ scale: 0.98 }}
+                  >
+                    <Link
+                      to={tool.path}
+                      className="flex flex-col items-center gap-2 p-4 bg-white rounded-xl border border-gray-200 hover:border-purple-300 hover:shadow-md transition-all group"
+                    >
+                      <div
+                        className="w-10 h-10 rounded-lg flex items-center justify-center text-white"
+                        style={{
+                          background: `linear-gradient(135deg, ${tool.bg.from}, ${tool.bg.to})`,
+                        }}
+                      >
+                        <tool.Icon className="w-5 h-5" />
+                      </div>
+                      <span className="text-xs font-medium text-slate-600 text-center group-hover:text-purple-600 transition-colors line-clamp-2">
+                        {tool.title}
+                      </span>
+                    </Link>
+                  </motion.div>
+                ))}
+              </div>
+            </motion.section>
+
+            {/* Creations section */}
+            <section>
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
+                <h2 className="text-lg font-semibold text-slate-800">Recent Creations</h2>
+
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    <input
+                      type="text"
+                      placeholder="Search creations..."
+                      value={search}
+                      onChange={(e) => setSearch(e.target.value)}
+                      className="pl-9 pr-4 py-2 text-sm border border-gray-200 rounded-lg w-full sm:w-56 focus:outline-none focus:ring-2 focus:ring-purple-500/30 focus:border-purple-400"
+                    />
+                  </div>
+
+                  <div className="flex items-center gap-2 overflow-x-auto pb-1">
+                    <Filter className="w-4 h-4 text-gray-400 shrink-0" />
+                    {TYPE_FILTERS.map((f) => (
+                      <button
+                        key={f.id}
+                        onClick={() => setTypeFilter(f.id)}
+                        className={`px-3 py-1.5 text-xs font-medium rounded-full whitespace-nowrap transition-all ${
+                          typeFilter === f.id
+                            ? 'bg-purple-600 text-white shadow-sm'
+                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                        }`}
+                      >
+                        {f.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <AnimatePresence mode="popLayout">
+                {filteredCreations.length === 0 ? (
+                  <motion.div
+                    key="empty"
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0 }}
+                    className="text-center py-16 px-6 bg-white rounded-2xl border border-dashed border-gray-300"
+                  >
+                    <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-purple-50 flex items-center justify-center">
+                      <Sparkles className="w-8 h-8 text-purple-500" />
+                    </div>
+                    <p className="text-slate-700 font-medium">
+                      {creations.length === 0
+                        ? 'No creations yet'
+                        : 'No matches found'}
+                    </p>
+                    <p className="text-sm text-gray-400 mt-2 max-w-sm mx-auto">
+                      {creations.length === 0
+                        ? 'Start by using one of the AI tools above to create your first masterpiece.'
+                        : 'Try adjusting your search or filter.'}
+                    </p>
+                    {creations.length === 0 && (
+                      <Link
+                        to="/ai/write-article"
+                        className="inline-flex items-center gap-2 mt-6 px-5 py-2.5 bg-purple-600 text-white text-sm font-medium rounded-lg hover:bg-purple-700 transition-colors"
+                      >
+                        Create your first article
+                        <ArrowRight className="w-4 h-4" />
+                      </Link>
+                    )}
+                  </motion.div>
+                ) : (
+                  <motion.div layout className="space-y-3">
+                    {filteredCreations.map((item, index) => {
+                      const TypeIcon = typeIcons[item.type] || FileText
+                      return (
+                        <motion.div
+                          key={item.id}
+                          layout
+                          initial={{ opacity: 0, x: -12 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          exit={{ opacity: 0, x: 12 }}
+                          transition={{ delay: index * 0.03 }}
+                        >
+                          <div className="relative">
+                            <div className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-1 hidden lg:flex w-8 h-8 rounded-lg bg-purple-50 items-center justify-center">
+                              <TypeIcon className="w-4 h-4 text-purple-600" />
+                            </div>
+                            <CreationItem item={item} />
+                          </div>
+                        </motion.div>
+                      )
+                    })}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </section>
+          </>
+        )}
+
+        {!loading && (
+          <motion.button
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            onClick={() => getDashboardData({ isRefresh: true })}
+            disabled={refreshing}
+            className="flex items-center gap-2 mx-auto text-sm text-gray-500 hover:text-purple-600 transition-colors disabled:opacity-50"
+          >
+            <Loader2 className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+            {refreshing ? 'Refreshing...' : 'Refresh dashboard'}
+          </motion.button>
         )}
       </div>
-    
     </div>
   )
 }

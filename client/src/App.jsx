@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react'
+import React from 'react'
 import { Routes, Route } from 'react-router-dom'
 import Home from './pages/Home.jsx'
 import Layout from './pages/Layout'
@@ -10,17 +10,10 @@ import RemoveBackground from './pages/RemoveBackground'
 import RemoveObject from './pages/RemoveObject'
 import ReviewResime from './pages/ReviewResime'
 import Commnity from './pages/Commnity'
-import { useAuth } from '@clerk/react'
 import {Toaster} from "react-hot-toast"
 
 
 const App = () => {
-
-  const { getToken } = useAuth()
-  useEffect(()=>{
-    getToken().then((token)=>console.log(token));
-  },[])
-
 
   return (
     <div>
