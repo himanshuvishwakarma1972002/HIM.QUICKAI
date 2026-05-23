@@ -191,24 +191,16 @@ export default function Hero() {
               
               {/* Removed the top dot bar. 3D Video now starts right from the top */}
               
-              {/* 3D Video Section */}
-              <div className="relative w-full h-48 sm:h-56 bg-gradient-to-br from-indigo-900 via-purple-900 to-black overflow-hidden group">
-                <video
-                  autoPlay
-                  loop
-                  muted
-                  playsInline
-                  className="w-full h-full object-cover opacity-90 group-hover:opacity-100 transition-opacity duration-500"
-                >
-                  <source
-                    src="https://assets.mixkit.co/videos/preview/mixkit-artificial-intelligence-neural-network-animation-loop-9717-large.mp4"
-                    type="video/mp4"
-                  />
-                  Your browser does not support the video tag.
-                </video>
+              {/* Tech GIF Section */}
+              <div className="relative w-full h-48 sm:h-56 md:h-64 bg-gradient-to-br from-indigo-900 via-blue-900 to-black overflow-hidden group">
+                <img
+                  src="/Blue-and-White-Futuristic-Technology-Video.gif"
+                  alt="Him.Ai futuristic technology"
+                  className="w-full h-full object-cover object-center opacity-95 group-hover:opacity-100 transition-opacity duration-500"
+                />
 
                 {/* AI Core Active Badge */}
-                <div className="absolute top-4 right-4 bg-black/60 backdrop-blur-md border border-white/10 px-3 py-1.5 rounded-full flex items-center space-x-2 shadow-lg">
+                <div className="absolute top-4 right-4 z-10 bg-black/60 backdrop-blur-md border border-white/10 px-3 py-1.5 rounded-full flex items-center space-x-2 shadow-lg">
                   <div className="relative flex h-2.5 w-2.5">
                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
                     <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-green-500"></span>
@@ -217,7 +209,7 @@ export default function Hero() {
                 </div>
 
                 {/* Bottom Gradient Fade */}
-                <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-gray-900 to-transparent"></div>
+                <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-gray-900/90 to-transparent pointer-events-none"></div>
               </div>
 
               {/* Typing Code Section */}
