@@ -1,5 +1,5 @@
 import { Menu, X } from 'lucide-react'
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { Outlet, useNavigate } from 'react-router-dom'
 import { assets } from '../assets/assets'
 import Sidebar from '../components/Sidebar'
@@ -10,56 +10,66 @@ const Layout = () => {
   const [sidebar, setSidebar] = useState(false)
   const { user } = useUser()
 
-  return user ? (
-    <div className='flex flex-col h-screen bg-[#F4F7FB]'>
+  useEffect(() => {
+    const closeOnResize = () => {
+      if (window.innerWidth >= 640) setSidebar(false)
+    }
+    window.addEventListener('resize', closeOnResize)
+    return () => window.removeEventListener('resize', closeOnResize)
+  }, [])
 
-      {/* Navbar */}
-      <nav className='flex items-center justify-between px-4 py-3 bg-white border-b border-gray-200'>
-        
-        {/* Logo */}
-        <img 
-          src={assets.logo} 
-          alt='logo' 
-          className='w-32 sm:w-44 cursor-pointer'
-          onClick={() => navigate('/')} 
+  useEffect(() => {
+    document.body.style.overflow = sidebar ? 'hidden' : ''
+    return () => {
+      document.body.style.overflow = ''
+    }
+  }, [sidebar])
+
+  return user ? (
+    <div className="flex flex-col h-screen bg-[#F4F7FB] overflow-hidden">
+
+      {/* Top navbar — fixed height for sidebar alignment */}
+      <nav className="relative z-50 flex h-14 shrink-0 items-center justify-between px-4 bg-white border-b border-gray-200">
+        <img
+          src={assets.logo}
+          alt="Him.Ai logo"
+          className="h-8 w-auto max-w-[140px] sm:max-w-[176px] cursor-pointer object-contain"
+          onClick={() => navigate('/')}
         />
 
-        {/* Menu Icon */}
-        {
-          sidebar ? (
-            <X 
-              className='w-6 h-6 text-gray-600 sm:hidden cursor-pointer'
-              onClick={() => setSidebar(false)}
-            />
-          ) : (
-            <Menu 
-              className='w-6 h-6 text-gray-600 sm:hidden cursor-pointer'
-              onClick={() => setSidebar(true)}
-            />
-          )
-        }
+        <button
+          type="button"
+          aria-label={sidebar ? 'Close menu' : 'Open menu'}
+          className="sm:hidden p-2 -mr-2 rounded-lg text-gray-600 hover:bg-gray-100"
+          onClick={() => setSidebar((prev) => !prev)}
+        >
+          {sidebar ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+        </button>
       </nav>
 
-      {/* Main Layout */}
-      <div className='flex flex-1 w-full min-h-0 h-[calc(100vh-64px)]'>
-        
-        {/* Sidebar */}
-        <Sidebar 
-          sidebar={sidebar} 
-          setSidebar={setSidebar} 
-          user={user} 
-        />
+      {/* Main area */}
+      <div className="relative flex flex-1 min-h-0 w-full">
 
-        {/* Content */}
-        <div className='flex-1 min-w-0 overflow-auto bg-[#F4F7FB]'>
+        {/* Mobile backdrop */}
+        {sidebar && (
+          <button
+            type="button"
+            aria-label="Close menu"
+            className="fixed inset-0 top-14 z-30 bg-black/40 sm:hidden"
+            onClick={() => setSidebar(false)}
+          />
+        )}
+
+        <Sidebar sidebar={sidebar} setSidebar={setSidebar} />
+
+        {/* Page content — full width on mobile */}
+        <main className="flex-1 min-w-0 w-full overflow-y-auto overflow-x-hidden bg-[#F4F7FB]">
           <Outlet />
-        </div>
-
+        </main>
       </div>
-
     </div>
   ) : (
-    <div className='flex items-center justify-center h-screen'>
+    <div className="flex items-center justify-center h-screen">
       <SignIn />
     </div>
   )

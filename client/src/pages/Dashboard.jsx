@@ -5,9 +5,6 @@ import {
   Sparkles,
   Search,
   Filter,
-  Image,
-  FileText,
-  Hash,
   Loader2,
   ArrowRight,
   Calendar,
@@ -29,19 +26,13 @@ const TYPE_FILTERS = [
   { id: 'image', label: 'Images' },
 ]
 
-const typeIcons = {
-  article: FileText,
-  'blog-title': Hash,
-  image: Image,
-}
-
 const StatCard = ({ title, value, subtitle, icon: Icon, gradient, delay = 0 }) => (
   <motion.div
     initial={{ opacity: 0, y: 16 }}
     animate={{ opacity: 1, y: 0 }}
     transition={{ delay, duration: 0.4 }}
     whileHover={{ y: -4, transition: { duration: 0.2 } }}
-    className="flex justify-between items-center min-w-[260px] flex-1 p-5 bg-white rounded-2xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow"
+    className="flex justify-between items-center min-w-0 w-full flex-1 p-4 sm:p-5 bg-white rounded-2xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow"
   >
     <div className="text-slate-600">
       <p className="text-sm text-gray-500">{title}</p>
@@ -158,19 +149,19 @@ const Dashboard = () => {
   if (!isLoaded) return null
 
   return (
-    <div className="h-full overflow-y-auto p-4 sm:p-6 bg-gradient-to-b from-gray-50 to-white">
-      <div className="max-w-6xl mx-auto space-y-8">
+    <div className="min-h-full w-full p-3 sm:p-6 pb-8 bg-gradient-to-b from-gray-50 to-white">
+      <div className="max-w-6xl mx-auto space-y-6 sm:space-y-8">
         {/* Welcome header */}
         <motion.div
           initial={{ opacity: 0, y: -12 }}
           animate={{ opacity: 1, y: 0 }}
-          className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-purple-600 via-violet-600 to-blue-600 p-6 sm:p-8 text-white shadow-lg"
+          className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-purple-600 via-violet-600 to-blue-600 p-5 sm:p-8 text-white shadow-lg"
         >
           <div className="absolute -right-8 -top-8 w-40 h-40 bg-white/10 rounded-full blur-2xl" />
           <div className="absolute -left-4 -bottom-4 w-32 h-32 bg-white/10 rounded-full blur-xl" />
           <div className="relative z-10">
             <p className="text-purple-100 text-sm font-medium">Welcome back</p>
-            <h1 className="text-2xl sm:text-3xl font-bold mt-1">
+            <h1 className="text-xl sm:text-3xl font-bold mt-1">
               Hey, {firstName} 👋
             </h1>
             <p className="text-purple-100/90 mt-2 max-w-lg text-sm sm:text-base">
@@ -184,7 +175,7 @@ const Dashboard = () => {
         ) : (
           <>
             {/* Stats grid */}
-            <div className="grid sm:grid-cols-2 xl:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4">
               <StatCard
                 title="Total Creations"
                 value={creations.length}
@@ -327,9 +318,7 @@ const Dashboard = () => {
                   </motion.div>
                 ) : (
                   <motion.div layout className="space-y-3">
-                    {filteredCreations.map((item, index) => {
-                      const TypeIcon = typeIcons[item.type] || FileText
-                      return (
+                    {filteredCreations.map((item, index) => (
                         <motion.div
                           key={item.id}
                           layout
@@ -338,15 +327,9 @@ const Dashboard = () => {
                           exit={{ opacity: 0, x: 12 }}
                           transition={{ delay: index * 0.03 }}
                         >
-                          <div className="relative">
-                            <div className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-1 hidden lg:flex w-8 h-8 rounded-lg bg-purple-50 items-center justify-center">
-                              <TypeIcon className="w-4 h-4 text-purple-600" />
-                            </div>
-                            <CreationItem item={item} />
-                          </div>
+                          <CreationItem item={item} />
                         </motion.div>
-                      )
-                    })}
+                    ))}
                   </motion.div>
                 )}
               </AnimatePresence>

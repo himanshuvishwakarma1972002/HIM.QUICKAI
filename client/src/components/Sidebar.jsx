@@ -1,6 +1,6 @@
 import { SignOutButton, useUser, useClerk } from '@clerk/react'
 import { Eraser, FileText, Hash, House, Image, LogOut, Scissors, SquarePen, Users } from 'lucide-react'
-import React, { useEffect } from 'react'
+import React, { useEffect, useRef } from 'react'
 import { NavLink } from 'react-router-dom'
 
 const navItems = [
@@ -17,41 +17,44 @@ const navItems = [
 const Sidebar = ({ sidebar, setSidebar }) => {
   const { user, isLoaded } = useUser()
   const { openUserProfile } = useClerk()
+  const hasReloadedRef = useRef(false)
 
-  // ✅ Force latest data from Clerk
   useEffect(() => {
-    if (user) {
+    if (isLoaded && user && !hasReloadedRef.current) {
+      hasReloadedRef.current = true
       user.reload()
     }
-  }, [user])
+  }, [isLoaded, user])
 
-  // ✅ Safe + case-insensitive plan check
   const userPlan = user?.publicMetadata?.plan?.toLowerCase() || 'free'
 
-  // ✅ Wait until Clerk loads
   if (!isLoaded) return null
 
   return (
-    <div
-      className={`w-60 bg-white border-r border-gray-200 flex flex-col max-sm:absolute top-14 bottom-0 left-0 z-10
-      ${sidebar ? 'translate-x-0' : 'max-sm:-translate-x-full'}
-      transition-all duration-300 ease-in-out`}
+    <aside
+      className={`
+        shrink-0 w-64 max-w-[85vw] bg-white border-r border-gray-200 flex flex-col
+        fixed sm:static left-0 z-40
+        top-14 h-[calc(100vh-3.5rem)] sm:top-auto sm:h-auto sm:min-h-0
+        transition-transform duration-300 ease-in-out shadow-xl sm:shadow-none
+        ${sidebar ? 'translate-x-0' : '-translate-x-full'}
+        sm:translate-x-0
+      `}
     >
-
       {/* User Section */}
-      <div className="my-7 w-full px-3 flex flex-col items-center">
+      <div className="py-5 px-3 flex flex-col items-center border-b border-gray-100 sm:border-none">
         <img
           src={user?.imageUrl}
           alt="User avatar"
-          className="w-16 h-16 rounded-full"
+          className="w-14 h-14 sm:w-16 sm:h-16 rounded-full object-cover"
         />
         <h1 className="mt-2 text-center text-sm font-medium text-slate-800 truncate max-w-full px-2">
-          {user?.fullName || "Guest"}
+          {user?.fullName || 'Guest'}
         </h1>
       </div>
 
-      {/* Nav Links */}
-      <div className='px-3 flex-1'>
+      {/* Nav Links — scrollable on small screens */}
+      <div className="px-3 py-3 flex-1 overflow-y-auto overscroll-contain">
         <nav className="w-full flex flex-col gap-1">
           {navItems.map(({ to, label, icon }) => (
             <NavLink
@@ -69,9 +72,9 @@ const Sidebar = ({ sidebar, setSidebar }) => {
               {({ isActive }) => (
                 <>
                   {React.createElement(icon, {
-                    className: `w-4 h-4 ${isActive ? 'text-white' : ''}`,
+                    className: `w-4 h-4 shrink-0 ${isActive ? 'text-white' : ''}`,
                   })}
-                  {label}
+                  <span className="truncate">{label}</span>
                 </>
               )}
             </NavLink>
@@ -80,27 +83,22 @@ const Sidebar = ({ sidebar, setSidebar }) => {
       </div>
 
       {/* Bottom Section */}
-      <div className='w-full border-t border-gray-200 p-4 flex items-center justify-between'>
-        
-        {/* Profile */}
-        <div 
-          onClick={openUserProfile} 
-          className='flex gap-2 items-center cursor-pointer'
+      <div className="w-full border-t border-gray-200 p-3 sm:p-4 flex items-center justify-between gap-2 shrink-0 bg-white">
+        <div
+          onClick={openUserProfile}
+          className="flex gap-2 items-center cursor-pointer min-w-0 flex-1"
         >
-          <img src={user?.imageUrl} className='w-8 rounded-full' alt='' />
-
-          <div>
-            <h1 className='text-sm font-medium'>
-              {user?.fullName}
-            </h1>
-
-            {/* ✅ FINAL PLAN DISPLAY */}
+          <img
+            src={user?.imageUrl}
+            className="w-8 h-8 rounded-full shrink-0 object-cover"
+            alt=""
+          />
+          <div className="min-w-0">
+            <h1 className="text-sm font-medium truncate">{user?.fullName}</h1>
             <p className="text-xs">
               <span
                 className={`font-medium ${
-                  userPlan === 'premium'
-                    ? 'text-green-600'
-                    : 'text-gray-500'
+                  userPlan === 'premium' ? 'text-green-600' : 'text-gray-500'
                 }`}
               >
                 {userPlan === 'premium' ? 'Premium' : 'Free'}
@@ -110,14 +108,11 @@ const Sidebar = ({ sidebar, setSidebar }) => {
           </div>
         </div>
 
-        {/* Logout */}
         <SignOutButton>
-          <LogOut className='w-5 text-gray-400 hover:text-gray-700 transition cursor-pointer'/>
+          <LogOut className="w-5 h-5 shrink-0 text-gray-400 hover:text-gray-700 transition cursor-pointer" />
         </SignOutButton>
-
       </div>
-
-    </div>
+    </aside>
   )
 }
 
