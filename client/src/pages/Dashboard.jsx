@@ -151,24 +151,7 @@ const Dashboard = () => {
   return (
     <div className="min-h-full w-full p-3 sm:p-6 pb-8 bg-gradient-to-b from-gray-50 to-white">
       <div className="max-w-6xl mx-auto space-y-6 sm:space-y-8">
-        {/* Welcome header */}
-        <motion.div
-          initial={{ opacity: 0, y: -12 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-purple-600 via-violet-600 to-blue-600 p-5 sm:p-8 text-white shadow-lg"
-        >
-          <div className="absolute -right-8 -top-8 w-40 h-40 bg-white/10 rounded-full blur-2xl" />
-          <div className="absolute -left-4 -bottom-4 w-32 h-32 bg-white/10 rounded-full blur-xl" />
-          <div className="relative z-10">
-            <p className="text-purple-100 text-sm font-medium">Welcome back</p>
-            <h1 className="text-xl sm:text-3xl font-bold mt-1">
-              Hey, {firstName} 👋
-            </h1>
-            <p className="text-purple-100/90 mt-2 max-w-lg text-sm sm:text-base">
-              Track your AI creations, monitor usage, and jump into tools from one place.
-            </p>
-          </div>
-        </motion.div>
+        
 
         {loading ? (
           <DashboardSkeleton />

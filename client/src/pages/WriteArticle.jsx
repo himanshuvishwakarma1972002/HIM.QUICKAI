@@ -1,9 +1,9 @@
-import React, { useState } from 'react'
+import React, { useMemo, useState } from 'react'
 import { Edit, Sparkles } from 'lucide-react'
 import axios from 'axios'
 import toast from 'react-hot-toast'
 import { useAuth } from '@clerk/react'
-import Markdown from 'react-markdown'
+import CreationItem from '../components/CreationItem'
 
 axios.defaults.baseURL = import.meta.env.VITE_BASE_URL;
 
@@ -18,6 +18,7 @@ const WriteArticle = () => {
   const [selectedLength, setSelectedLength] = useState(articleLength[0].length)
   const [input, setInput] = useState('')
   const [content, setContent] = useState('')
+  const [generatedPrompt, setGeneratedPrompt] = useState('')
   const [loading, setLoading] = useState(false)
 
   const { getToken } = useAuth()
@@ -38,6 +39,7 @@ const WriteArticle = () => {
       )
 
       if (data.success) {
+        setGeneratedPrompt(prompt)
         setContent(data.content)
       } else {
         toast.error(data.message)
@@ -49,6 +51,17 @@ const WriteArticle = () => {
 
     setLoading(false)
   }
+
+  const previewItem = useMemo(() => {
+    if (!content) return null
+    return {
+      id: 'preview',
+      prompt: generatedPrompt || `Write an article about ${input}`,
+      type: 'article',
+      content,
+      created_at: new Date().toISOString(),
+    }
+  }, [content, generatedPrompt, input])
 
   return (
     <div className='h-full overflow-y-auto p-6 flex flex-wrap gap-6 bg-gradient-to-br from-gray-50 to-gray-100'>
@@ -127,7 +140,7 @@ const WriteArticle = () => {
           <h1 className='text-lg font-semibold'>Generated Article</h1>
         </div>
 
-        {!content ? (
+        {!previewItem ? (
           <div className='flex-1 flex flex-col justify-center items-center text-gray-400 gap-3 text-center'>
             <Edit className='w-10 h-10 opacity-60' />
             <p className='text-sm'>
@@ -135,12 +148,8 @@ const WriteArticle = () => {
             </p>
           </div>
         ) : (
-          <div className='flex-1 overflow-y-auto pr-3 custom-scrollbar'>
-
-            <div className='prose max-w-none text-sm text-slate-700 leading-relaxed'>
-              <Markdown>{content}</Markdown>
-            </div>
-
+          <div className='flex-1 overflow-y-auto'>
+            <CreationItem item={previewItem} defaultExpanded />
           </div>
         )}
 

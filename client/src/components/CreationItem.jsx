@@ -1,9 +1,9 @@
 import React, { useState } from 'react'
 import Markdown from 'react-markdown'
 
-const CreationItem = ({ item }) => {
+const CreationItem = ({ item, defaultExpanded = false }) => {
 
-    const [expanded, setExpanded] = useState(false)
+    const [expanded, setExpanded] = useState(defaultExpanded)
 
   return (
     <div onClick={()=> setExpanded(!expanded)} className='p-4 max-w-5xl text-sm bg-white border border-gray-200 rounded-lg cursor-pointer hover:shadow-sm transition'>
