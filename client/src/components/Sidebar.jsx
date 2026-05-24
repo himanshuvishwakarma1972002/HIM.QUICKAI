@@ -34,15 +34,15 @@ const Sidebar = ({ sidebar, setSidebar }) => {
     <aside
       className={`
         shrink-0 w-64 max-w-[85vw] bg-white border-r border-gray-200 flex flex-col
-        fixed sm:static left-0 z-40
-        top-14 h-[calc(100vh-3.5rem)] sm:top-auto sm:h-auto sm:min-h-0
+        fixed sm:static left-0 z-40 overflow-hidden
+        top-14 bottom-0 sm:top-auto sm:bottom-auto sm:h-full
         transition-transform duration-300 ease-in-out shadow-xl sm:shadow-none
         ${sidebar ? 'translate-x-0' : '-translate-x-full'}
         sm:translate-x-0
       `}
     >
-      {/* User Section */}
-      <div className="py-5 px-3 flex flex-col items-center border-b border-gray-100 sm:border-none">
+      {/* User Section — image + name (mobile + desktop) */}
+      <div className="py-4 sm:py-5 px-3 flex flex-col items-center shrink-0 border-b border-gray-100 sm:border-none">
         <img
           src={user?.imageUrl}
           alt="User avatar"
@@ -53,9 +53,9 @@ const Sidebar = ({ sidebar, setSidebar }) => {
         </h1>
       </div>
 
-      {/* Nav Links — scrollable on small screens */}
-      <div className="px-3 py-3 flex-1 overflow-y-auto overscroll-contain">
-        <nav className="w-full flex flex-col gap-1">
+      {/* Nav Links — scrollable middle section */}
+      <div className="px-3 py-3 sm:py-2 flex-1 min-h-0 overflow-y-auto overscroll-contain">
+        <nav className="w-full flex flex-col gap-1 pb-2">
           {navItems.map(({ to, label, icon }) => (
             <NavLink
               key={to}
@@ -82,15 +82,15 @@ const Sidebar = ({ sidebar, setSidebar }) => {
         </nav>
       </div>
 
-      {/* Bottom Section */}
-      <div className="w-full border-t border-gray-200 p-3 sm:p-4 flex items-center justify-between gap-2 shrink-0 bg-white">
+      {/* Bottom Section — always pinned on mobile */}
+      <div className="mt-auto w-full border-t border-gray-200 p-3 sm:p-4 flex items-center justify-between gap-2 shrink-0 bg-white pb-[max(0.75rem,env(safe-area-inset-bottom))]">
         <div
           onClick={openUserProfile}
           className="flex gap-2 items-center cursor-pointer min-w-0 flex-1"
         >
           <img
             src={user?.imageUrl}
-            className="w-8 h-8 rounded-full shrink-0 object-cover"
+            className="w-9 h-9 sm:w-8 sm:h-8 rounded-full shrink-0 object-cover"
             alt=""
           />
           <div className="min-w-0">
