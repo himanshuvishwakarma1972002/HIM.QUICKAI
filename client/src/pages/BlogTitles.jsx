@@ -3,6 +3,7 @@ import { Hash, Sparkles } from 'lucide-react'
 import axios from 'axios'
 import toast from 'react-hot-toast'
 import { useAuth } from '@clerk/react'
+import { getClerkAuthToken } from '../utils/auth'
 
 axios.defaults.baseURL = import.meta.env.VITE_BASE_URL;
 
@@ -18,7 +19,7 @@ const BlogTitles = () => {
   const [titles, setTitles] = useState([])
   const [loading, setLoading] = useState(false)
 
-  const { getToken } = useAuth()
+  const { getToken, isSignedIn } = useAuth()
 
   const onSubmitHandler = async (e) => {
     e.preventDefault();
@@ -27,9 +28,14 @@ const BlogTitles = () => {
       return toast.error("Enter a keyword");
     }
 
+    if (!isSignedIn) {
+      return toast.error('Please sign in first')
+    }
+
     try {
       setLoading(true)
 
+      const token = await getClerkAuthToken(getToken)
       const { data } = await axios.post(
         '/api/ai/generate-blog-title',
         {
@@ -38,7 +44,7 @@ const BlogTitles = () => {
         },
         {
           headers: {
-            Authorization: `Bearer ${await getToken()}`
+            Authorization: `Bearer ${token}`
           }
         }
       )

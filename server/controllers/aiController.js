@@ -12,13 +12,14 @@ import OpenAI from "openai";
 
 const AI = new OpenAI({
     apiKey: process.env.GEMINI_API_KEY,
-    baseURL: "https://generativelanguage.googleapis.com/v1beta"
+    baseURL: "https://generativelanguage.googleapis.com/v1beta/openai",
 });
-const GEMINI_MODEL = (process.env.GEMINI_MODEL || "gemini-3-flash-preview").replace(/"/g, "").trim();
+const GEMINI_MODEL = (process.env.GEMINI_MODEL || "gemini-2.0-flash").replace(/"/g, "").trim();
 const FALLBACK_MODELS = [...new Set([
   GEMINI_MODEL,
-  "gemini-3-flash-preview"
-
+  "gemini-2.0-flash",
+  "gemini-1.5-flash-002",
+  "gemini-1.5-pro",
 ])];
 
 const createChatCompletion = async (messages, maxTokens) => {

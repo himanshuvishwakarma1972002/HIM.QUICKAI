@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useEffect, useRef } from 'react'
 import { Routes, Route } from 'react-router-dom'
 import Home from './pages/Home.jsx'
 import Layout from './pages/Layout'
@@ -10,10 +10,29 @@ import RemoveBackground from './pages/RemoveBackground'
 import RemoveObject from './pages/RemoveObject'
 import ReviewResime from './pages/ReviewResime'
 import Commnity from './pages/Commnity'
-import {Toaster} from "react-hot-toast"
-
+import { Toaster } from 'react-hot-toast'
+import { useAuth } from '@clerk/react'
 
 const App = () => {
+  const { isLoaded, isSignedIn, getToken } = useAuth()
+  const tokenLoggedRef = useRef(false)
+
+  useEffect(() => {
+    if (!isLoaded || !isSignedIn || tokenLoggedRef.current) return
+
+    tokenLoggedRef.current = true
+    getToken()
+      .then((token) => {
+        if (token) {
+          console.log('[Clerk] Session token:', token)
+        } else {
+          console.warn('[Clerk] Token is null — try signing out and back in.')
+        }
+      })
+      .catch((err) => {
+        console.error('[Clerk] Failed to get token:', err?.message || err)
+      })
+  }, [isLoaded, isSignedIn])
 
   return (
     <div>

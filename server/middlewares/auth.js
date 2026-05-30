@@ -3,8 +3,16 @@ import { clerkClient } from "@clerk/express";
 // Middleware to check if the userID and hasPremiumPlan 
 export const auth = async (req, res, next) => {
     try {
-        const { userId, has } = await req.auth()
-        const hasPremiumPlan = await has({plan: 'premium'});
+        const { userId, has } = req.auth();
+
+        if (!userId) {
+            return res.status(401).json({
+                success: false,
+                message: "Unauthorized. Please sign in and send a valid Bearer token.",
+            });
+        }
+
+        const hasPremiumPlan = await has({ plan: 'premium' });
 
         const user = await clerkClient.users.getUser(userId);
 
