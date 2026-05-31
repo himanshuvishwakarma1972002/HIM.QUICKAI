@@ -7,15 +7,13 @@ import FormData from "form-data";
 import { PDFParse } from "pdf-parse";
 import { clerkClient } from "@clerk/express";
 import OpenAI from "openai";
-import { GoogleGenerativeAI } from "@google/generative-ai";
 
-const getGeminiApiKey = () => (process.env.GEMINI_API_KEY || "").replace(/"/g, "").trim();
 
-const getOpenAIClient = () => new OpenAI({
-  apiKey: getGeminiApiKey(),
-  baseURL: "https://generativelanguage.googleapis.com/v1beta/openai",
+
+const AI = new OpenAI({
+    apiKey: process.env.GEMINI_API_KEY,
+    baseURL: "https://generativelanguage.googleapis.com/v1beta/openai",
 });
-
 const GEMINI_MODEL = (process.env.GEMINI_MODEL || "gemini-2.0-flash").replace(/"/g, "").trim();
 const FALLBACK_MODELS = [...new Set([
   GEMINI_MODEL,
@@ -24,51 +22,11 @@ const FALLBACK_MODELS = [...new Set([
   "gemini-1.5-pro",
 ])];
 
-const logGeminiError = (label, model, error) => {
-  console.log(`${label} [${model}]:`, error?.status || error?.code, error?.message);
-};
-
-const createGeminiNativeCompletion = async (messages, maxTokens) => {
-  const apiKey = getGeminiApiKey();
-  if (!apiKey) throw new Error("GEMINI_API_KEY is not configured");
-
-  const genAI = new GoogleGenerativeAI(apiKey);
-  const prompt = messages.map((m) => m.content).join("\n\n");
-  let lastError;
-
-  for (const model of FALLBACK_MODELS) {
-    try {
-      const geminiModel = genAI.getGenerativeModel({
-        model,
-        generationConfig: {
-          maxOutputTokens: maxTokens,
-          temperature: 0.7,
-        },
-      });
-      const result = await geminiModel.generateContent(prompt);
-      const text = result.response.text();
-      if (text) {
-        return { choices: [{ message: { content: text } }] };
-      }
-    } catch (error) {
-      lastError = error;
-      logGeminiError("Gemini native", model, error);
-    }
-  }
-
-  throw lastError;
-};
-
 const createChatCompletion = async (messages, maxTokens) => {
-  const apiKey = getGeminiApiKey();
-  if (!apiKey) throw new Error("GEMINI_API_KEY is not configured");
-
   let lastError;
-  const client = getOpenAIClient();
-
   for (const model of FALLBACK_MODELS) {
     try {
-      return await client.chat.completions.create({
+      return await AI.chat.completions.create({
         model,
         messages,
         temperature: 0.7,
@@ -76,12 +34,9 @@ const createChatCompletion = async (messages, maxTokens) => {
       });
     } catch (error) {
       lastError = error;
-      logGeminiError("OpenAI-compat", model, error);
     }
   }
-
-  console.log("OpenAI-compat failed for all models, trying native Gemini SDK...");
-  return createGeminiNativeCompletion(messages, maxTokens);
+  throw lastError;
 };
 
 const buildResumeFallbackReview = (resumeText) => {
@@ -449,15 +404,6 @@ export const resumeReview = async (req, res) => {
     const data = await parser.getText();
     await parser.destroy();
 
-    const resumeText = (data.text || "").trim();
-    if (!resumeText) {
-      return res.json({ success: false, message: "Could not extract text from the PDF. Try a text-based PDF." });
-    }
-
-    const truncatedResume = resumeText.length > 30000
-      ? `${resumeText.slice(0, 30000)}\n\n[Resume truncated for analysis]`
-      : resumeText;
-
     let content = "";
 
     try {
@@ -465,23 +411,17 @@ export const resumeReview = async (req, res) => {
         [
           {
             role: "user",
-            content: `Review this resume and give constructive feedback on strengths, weaknesses, and improvements:\n\n${truncatedResume}`,
+            content: `Review this resume and give constructive feedback on strengths, weaknesses, and improvements:\n\n${data.text}`,
           },
         ],
-        2000
+        1000
       );
 
       content = response.choices[0].message.content;
 
     } catch (aiError) {
-      console.log("RESUME AI PROVIDER ERROR:", aiError?.status || aiError?.code, aiError?.message);
-      if (!getGeminiApiKey()) {
-        return res.json({
-          success: false,
-          message: "AI service is not configured. Set GEMINI_API_KEY on the server.",
-        });
-      }
-      content = buildResumeFallbackReview(resumeText);
+      console.log("RESUME AI PROVIDER ERROR:", aiError?.status, aiError?.message);
+      content = buildResumeFallbackReview(data.text);
     }
 
     // ✅ SAVE TO DATABASE (🔥 THIS WAS MISSING)
