@@ -16,6 +16,11 @@ app.use(cors());
 app.use(express.json());
 app.use(clerkMiddleware());
 
+app.use((req, res, next) => {
+  res.setTimeout(120000);
+  next();
+});
+
 // Routes
 app.get('/', (req, res) => res.send('Server is Live!'));
 

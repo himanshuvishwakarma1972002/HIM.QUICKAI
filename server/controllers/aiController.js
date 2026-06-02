@@ -4,7 +4,7 @@ import { v2 as cloudinary } from "cloudinary";
 import axios from "axios";
 import fs from "fs";
 import FormData from "form-data";
-import { PDFParse } from "pdf-parse";
+import { extractResumeText } from "../utils/resumeText.js";
 import { clerkClient } from "@clerk/express";
 import OpenAI from "openai";
 
@@ -12,9 +12,9 @@ import OpenAI from "openai";
 
 const AI = new OpenAI({
     apiKey: process.env.GEMINI_API_KEY,
-    baseURL: "https://generativelanguage.googleapis.com/v1beta/openai",
+    baseURL: "https://generativelanguage.googleapis.com/v1beta",
 });
-const GEMINI_MODEL = (process.env.GEMINI_MODEL || "gemini-2.0-flash").replace(/"/g, "").trim();
+const GEMINI_MODEL = (process.env.GEMINI_MODEL || "gemini-3-flash-preview").replace(/"/g, "").trim();
 const FALLBACK_MODELS = [...new Set([
   GEMINI_MODEL,
   "gemini-2.0-flash",
@@ -392,17 +392,28 @@ export const removeImageObject = async (req, res) => {
 // ================== RESUME REVIEW ==================
 export const resumeReview = async (req, res) => {
   try {
-    const { userId } = req.auth(); // ✅ get userId
+    const { userId } = req.auth();
 
     if (!req.file) {
-      return res.json({ success: false, message: "Please upload a resume PDF" });
+      return res.json({
+        success: false,
+        message: "Please upload a resume (PDF, DOC, DOCX, or TXT)",
+      });
     }
 
-    // ✅ Read PDF
-    const buffer = fs.readFileSync(req.file.path);
-    const parser = new PDFParse({ data: buffer });
-    const data = await parser.getText();
-    await parser.destroy();
+    console.log("FILE RECEIVED:", req.file.originalname);
+
+    const resumeText = await extractResumeText(
+      req.file.buffer,
+      req.file.originalname
+    );
+
+    if (!resumeText?.trim()) {
+      return res.json({
+        success: false,
+        message: "Could not read text from this file. Try another format.",
+      });
+    }
 
     let content = "";
 
@@ -411,42 +422,38 @@ export const resumeReview = async (req, res) => {
         [
           {
             role: "user",
-            content: `Review this resume and give constructive feedback on strengths, weaknesses, and improvements:\n\n${data.text}`,
+            content: `Review this resume and give constructive feedback on strengths, weaknesses, and improvements:\n\n${resumeText}`,
           },
         ],
         1000
       );
 
-      content = response.choices[0].message.content;
-
+      content = response?.choices?.[0]?.message?.content || "No response";
     } catch (aiError) {
-      console.log("RESUME AI PROVIDER ERROR:", aiError?.status, aiError?.message);
-      content = buildResumeFallbackReview(data.text);
+      console.log("AI ERROR:", aiError?.message);
+      content = buildResumeFallbackReview(resumeText);
     }
 
-    // ✅ SAVE TO DATABASE (🔥 THIS WAS MISSING)
     await sql`
       INSERT INTO creations (user_id, prompt, content, type)
       VALUES (${userId}, ${"Resume Review"}, ${content}, 'resume-review')
     `;
 
-    // ✅ DELETE TEMP FILE
-    if (req.file?.path && fs.existsSync(req.file.path)) {
-      fs.unlinkSync(req.file.path);
-    }
-
-    // ✅ RESPONSE
     res.json({
       success: true,
       content,
     });
-
   } catch (error) {
-    console.log("RESUME ERROR:", error.message);
+    console.log("RESUME ERROR:", error);
+
+    const message =
+      error.code === "LIMIT_FILE_SIZE"
+        ? "File too large (max 5MB)"
+        : error.message || "Resume review failed";
 
     res.json({
       success: false,
-      message: error.message || "Resume review failed",
+      message,
     });
   }
 };

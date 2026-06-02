@@ -7,6 +7,23 @@ import Markdown from 'react-markdown'
 
 axios.defaults.baseURL = import.meta.env.VITE_BASE_URL
 
+const ACCEPTED_RESUME_TYPES = new Set([
+  'application/pdf',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'text/plain',
+])
+
+const ACCEPTED_RESUME_EXTENSIONS = ['.pdf', '.doc', '.docx', '.txt']
+
+const isAcceptedResumeFile = (file) => {
+  const ext = file.name.slice(file.name.lastIndexOf('.')).toLowerCase()
+  return (
+    ACCEPTED_RESUME_TYPES.has(file.type) ||
+    ACCEPTED_RESUME_EXTENSIONS.includes(ext)
+  )
+}
+
 const ReviewResume = () => {
 
   const [file, setFile] = useState(null)
@@ -19,10 +36,12 @@ const ReviewResume = () => {
   const onSubmitHandler = async (e) => {
     e.preventDefault()
 
-    if (!file) return toast.error('Please upload a resume PDF')
+    if (!file) return toast.error('Please upload a resume file')
 
     try {
       setLoading(true)
+
+      console.log('Uploading file:', file)
 
       const formData = new FormData()
       formData.append('resume', file)
@@ -35,8 +54,8 @@ const ReviewResume = () => {
         {
           headers: {
             Authorization: `Bearer ${token}`,
-            'Content-Type': 'multipart/form-data'
-          }
+          },
+          timeout: 120000,
         }
       )
 
@@ -47,7 +66,11 @@ const ReviewResume = () => {
       }
 
     } catch (error) {
-      toast.error(error.response?.data?.message || error.message)
+      const message =
+        error.code === 'ECONNABORTED'
+          ? 'Request timed out. Try a smaller file or check your connection.'
+          : error.response?.data?.message || error.message
+      toast.error(message)
     } finally {
       setLoading(false)
     }
@@ -57,8 +80,13 @@ const ReviewResume = () => {
     const selectedFile = e.target.files[0]
 
     if (selectedFile) {
-      if (selectedFile.type !== 'application/pdf') {
-        toast.error('Only PDF files are allowed')
+      if (!isAcceptedResumeFile(selectedFile)) {
+        toast.error('Only PDF, DOC, DOCX, and TXT files are allowed')
+        return
+      }
+
+      if (selectedFile.size > 5 * 1024 * 1024) {
+        toast.error('File too large (max 5MB)')
         return
       }
 
@@ -118,13 +146,13 @@ const ReviewResume = () => {
               <div className='flex flex-col items-center text-gray-400'>
                 <UploadCloud className='w-9 h-9 mb-2'/>
                 <p className='text-sm'>Click to Upload</p>
-                <span className='text-xs'>PDF only</span>
+                <span className='text-xs'>PDF, DOC, DOCX, TXT</span>
               </div>
             )}
 
             <input
               type="file"
-              accept="application/pdf"
+              accept=".pdf,.doc,.docx,.txt,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"
               onChange={handleFileUpload}
               className='hidden'
             />
