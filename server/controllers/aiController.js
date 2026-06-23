@@ -389,59 +389,282 @@ export const removeImageObject = async (req, res) => {
   }
 };
 
-// ================== RESUME REVIEW ==================
+// ================== RESUME STUDIO ==================
+const formatAtsReport = (data) => {
+  const lines = [
+    `# ATS Compatibility Report`,
+    ``,
+    `## Overall ATS Score: **${data.score}/100**`,
+    ``,
+    data.summary || "",
+    ``,
+    `## Matched Keywords`,
+    ...(data.matchedKeywords?.length
+      ? data.matchedKeywords.map((k) => `- ${k}`)
+      : ["- None detected"]),
+    ``,
+    `## Missing Keywords`,
+    ...(data.missingKeywords?.length
+      ? data.missingKeywords.map((k) => `- ${k}`)
+      : ["- None"]),
+    ``,
+    `## Formatting Issues`,
+    ...(data.formattingIssues?.length
+      ? data.formattingIssues.map((k) => `- ${k}`)
+      : ["- No major issues detected"]),
+    ``,
+    `## Strengths`,
+    ...(data.strengths?.length
+      ? data.strengths.map((k) => `- ${k}`)
+      : ["- Resume parsed successfully"]),
+    ``,
+    `## Recommended Improvements`,
+    ...(data.improvements?.length
+      ? data.improvements.map((k) => `- ${k}`)
+      : ["- Tailor keywords to the job description"]),
+  ];
+  return lines.join("\n");
+};
+
+const buildAtsFallback = (resumeText, jobDescription) => {
+  const resume = (resumeText || "").toLowerCase();
+  const job = (jobDescription || "").toLowerCase();
+  const words = [...new Set(job.match(/[a-z][a-z0-9+#.]{2,}/g) || [])];
+  const matched = words.filter((w) => resume.includes(w)).slice(0, 12);
+  const missing = words.filter((w) => !resume.includes(w)).slice(0, 12);
+  const score = Math.min(
+    95,
+    Math.round((matched.length / Math.max(words.length, 1)) * 100)
+  );
+
+  return {
+    score,
+    matchedKeywords: matched,
+    missingKeywords: missing,
+    formattingIssues: [
+      "AI service unavailable — limited heuristic check only",
+    ],
+    strengths: ["Resume file parsed successfully"],
+    improvements: [
+      "Add missing job keywords naturally in skills and experience",
+      "Use standard section headings (Experience, Education, Skills)",
+      "Keep formatting simple — avoid tables and graphics for ATS",
+    ],
+    summary:
+      "Fallback ATS scan completed. Connect AI service for a full analysis.",
+  };
+};
+
 export const resumeReview = async (req, res) => {
   try {
     const { userId } = req.auth();
+    const mode = req.body.mode || "review";
+    const companyName = (req.body.companyName || "").trim();
+    const jobTitle = (req.body.jobTitle || "").trim();
+    const jobDescription = (req.body.jobDescription || "").trim();
+    const profileInfo = (req.body.profileInfo || "").trim();
 
-    if (!req.file) {
+    let resumeText = "";
+
+    if (req.file) {
+      console.log("FILE RECEIVED:", req.file.originalname);
+      resumeText = await extractResumeText(
+        req.file.buffer,
+        req.file.originalname
+      );
+
+      if (!resumeText?.trim()) {
+        return res.json({
+          success: false,
+          message: "Could not read text from this file. Try another format.",
+        });
+      }
+    }
+
+    if (mode === "review" && !resumeText) {
       return res.json({
         success: false,
-        message: "Please upload a resume (PDF, DOC, DOCX, or TXT)",
+        message: "Please upload a resume file",
       });
     }
 
-    console.log("FILE RECEIVED:", req.file.originalname);
+    if (mode === "ats") {
+      if (!resumeText) {
+        return res.json({
+          success: false,
+          message: "Please upload a resume for ATS checking",
+        });
+      }
+      if (!jobDescription) {
+        return res.json({
+          success: false,
+          message: "Please paste the job description",
+        });
+      }
+    }
 
-    const resumeText = await extractResumeText(
-      req.file.buffer,
-      req.file.originalname
-    );
-
-    if (!resumeText?.trim()) {
-      return res.json({
-        success: false,
-        message: "Could not read text from this file. Try another format.",
-      });
+    if (mode === "tailor") {
+      if (!jobDescription) {
+        return res.json({
+          success: false,
+          message: "Please paste the job description",
+        });
+      }
+      if (!companyName && !jobTitle) {
+        return res.json({
+          success: false,
+          message: "Please enter the company name or job title",
+        });
+      }
+      if (!resumeText && !profileInfo) {
+        return res.json({
+          success: false,
+          message:
+            "Upload an existing resume or fill in your background details",
+        });
+      }
     }
 
     let content = "";
+    let atsScore = null;
+    let creationType = "resume-review";
+    let promptLabel = "Resume Review";
 
     try {
-      const response = await createChatCompletion(
-        [
-          {
-            role: "user",
-            content: `Review this resume and give constructive feedback on strengths, weaknesses, and improvements:\n\n${resumeText}`,
-          },
-        ],
-        1000
-      );
+      if (mode === "review") {
+        const response = await createChatCompletion(
+          [
+            {
+              role: "user",
+              content: `You are an expert career coach. Review this resume and provide constructive feedback.
 
-      content = response?.choices?.[0]?.message?.content || "No response";
+Cover:
+1. Overall impression
+2. Strengths
+3. Weaknesses
+4. Section-by-section improvements
+5. Actionable next steps
+
+Resume:
+${resumeText}`,
+            },
+          ],
+          1200
+        );
+        content = response?.choices?.[0]?.message?.content || "No response";
+        promptLabel = "Resume Review";
+      } else if (mode === "ats") {
+        creationType = "resume-ats";
+        promptLabel = `ATS Check — ${companyName || jobTitle || "Role"}`;
+
+        const response = await createChatCompletion(
+          [
+            {
+              role: "user",
+              content: `You are an ATS (Applicant Tracking System) expert. Analyze this resume against the job description.
+
+Company: ${companyName || "Not specified"}
+Role: ${jobTitle || "Not specified"}
+
+Job Description:
+${jobDescription}
+
+Resume:
+${resumeText}
+
+Respond ONLY with valid JSON (no markdown fences) in this exact shape:
+{
+  "score": <number 0-100>,
+  "matchedKeywords": ["keyword1", "keyword2"],
+  "missingKeywords": ["keyword1", "keyword2"],
+  "formattingIssues": ["issue1"],
+  "strengths": ["strength1"],
+  "improvements": ["improvement1"],
+  "summary": "2-3 sentence overview"
+}`,
+            },
+          ],
+          1500
+        );
+
+        const raw = response?.choices?.[0]?.message?.content || "";
+        const jsonMatch = raw.match(/\{[\s\S]*\}/);
+        const parsed = jsonMatch
+          ? JSON.parse(jsonMatch[0])
+          : buildAtsFallback(resumeText, jobDescription);
+
+        atsScore = parsed.score ?? 0;
+        content = formatAtsReport(parsed);
+      } else if (mode === "tailor") {
+        creationType = "resume-tailor";
+        promptLabel = `Tailored Resume — ${companyName}${jobTitle ? ` · ${jobTitle}` : ""}`;
+
+        const sourceBlock = resumeText
+          ? `Existing resume to improve and tailor:\n${resumeText}`
+          : `Candidate background (use this to build the resume):\n${profileInfo}`;
+
+        const response = await createChatCompletion(
+          [
+            {
+              role: "user",
+              content: `You are an expert resume writer. Create a professional, ATS-optimized resume tailored for a specific role.
+
+Target Company: ${companyName || "Not specified"}
+Target Position: ${jobTitle || "Not specified"}
+
+Job Description:
+${jobDescription}
+
+${sourceBlock}
+
+Requirements:
+- Output in clean Markdown
+- Sections: Contact Info (use placeholders if unknown), Professional Summary, Core Skills, Professional Experience, Projects (if relevant), Education
+- Mirror keywords from the job description naturally
+- Use strong action verbs and quantified achievements where possible
+- Keep it concise (1-2 pages worth of content)
+- Optimize for ATS parsing`,
+            },
+          ],
+          2000
+        );
+
+        content = response?.choices?.[0]?.message?.content || "No response";
+      }
     } catch (aiError) {
       console.log("AI ERROR:", aiError?.message);
-      content = buildResumeFallbackReview(resumeText);
+
+      if (mode === "review") {
+        content = buildResumeFallbackReview(resumeText);
+      } else if (mode === "ats") {
+        const fallback = buildAtsFallback(resumeText, jobDescription);
+        atsScore = fallback.score;
+        content = formatAtsReport(fallback);
+      } else {
+        content = [
+          "# Tailored Resume (Fallback)",
+          "",
+          "AI service is temporarily unavailable. Please try again shortly.",
+          "",
+          "## Target Role",
+          `**${jobTitle || "Role"}** at **${companyName || "Company"}**`,
+          "",
+          "## Job Description Summary",
+          jobDescription.slice(0, 500) + (jobDescription.length > 500 ? "..." : ""),
+        ].join("\n");
+      }
     }
 
     await sql`
       INSERT INTO creations (user_id, prompt, content, type)
-      VALUES (${userId}, ${"Resume Review"}, ${content}, 'resume-review')
+      VALUES (${userId}, ${promptLabel}, ${content}, ${creationType})
     `;
 
     res.json({
       success: true,
       content,
+      mode,
+      atsScore,
     });
   } catch (error) {
     console.log("RESUME ERROR:", error);
@@ -449,7 +672,7 @@ export const resumeReview = async (req, res) => {
     const message =
       error.code === "LIMIT_FILE_SIZE"
         ? "File too large (max 5MB)"
-        : error.message || "Resume review failed";
+        : error.message || "Resume processing failed";
 
     res.json({
       success: false,

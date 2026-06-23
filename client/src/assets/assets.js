@@ -57,8 +57,8 @@ export const AiToolsData = [
         path: '/ai/remove-object'
     },
     {
-        title: 'Resume Reviewer',
-        description: 'Get your resume reviewed by AI to improve your chances of landing your dream job.',
+        title: 'Resume Studio',
+        description: 'Review resumes, run ATS checks, and build tailored resumes for any company role.',
         Icon: FileText,
         bg: { from: '#12B7AC', to: '#08B6CE' },
         path: '/ai/review-resume'
