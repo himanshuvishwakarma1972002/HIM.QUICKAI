@@ -10,7 +10,7 @@ import RemoveBackground from './pages/RemoveBackground'
 import RemoveObject from './pages/RemoveObject'
 import ReviewResime from './pages/ReviewResime'
 import Commnity from './pages/Commnity'
-import Gpt from './pages/gpt' // ✅ CORRECT
+import Gpt from './pages/gpt.jsx' // ✅ CORRECT
 import { Toaster } from 'react-hot-toast'
 import { useAuth } from '@clerk/react'
 
