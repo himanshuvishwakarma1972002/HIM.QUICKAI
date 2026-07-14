@@ -10,6 +10,7 @@ import RemoveBackground from './pages/RemoveBackground'
 import RemoveObject from './pages/RemoveObject'
 import ReviewResime from './pages/ReviewResime'
 import Commnity from './pages/Commnity'
+import Gpt from './pages/gpt' // ✅ CORRECT
 import { Toaster } from 'react-hot-toast'
 import { useAuth } from '@clerk/react'
 
@@ -25,8 +26,6 @@ const App = () => {
       .then((token) => {
         if (token) {
           console.log('[Clerk] Session token:', token)
-        } else {
-          console.warn('[Clerk] Token is null — try signing out and back in.')
         }
       })
       .catch((err) => {
@@ -37,18 +36,22 @@ const App = () => {
   return (
     <div>
       <Toaster />
+
       <Routes>
         <Route path='/' element={<Home />} />
+
         <Route path='/ai' element={<Layout />}>
-          <Route index element={<Dashboard />}/>
-          <Route path= 'write-article' element={<WriteArticle />}/>
-          <Route path= 'blog-titles' element={<BlogTitles />}/>
-          <Route path= 'generate-images' element={<GenerateImages />}/>
-          <Route path= 'remove-background' element={<RemoveBackground />}/>
-          <Route path= 'remove-object' element={<RemoveObject />}/>
-          <Route path='review-resume' element={<ReviewResime />}/>
-          <Route path= 'community' element={<Commnity />}/>
-         
+          <Route index element={<Dashboard />} />
+          <Route path='write-article' element={<WriteArticle />} />
+          <Route path='blog-titles' element={<BlogTitles />} />
+          <Route path='generate-images' element={<GenerateImages />} />
+          <Route path='remove-background' element={<RemoveBackground />} />
+          <Route path='remove-object' element={<RemoveObject />} />
+          <Route path='review-resume' element={<ReviewResime />} />
+          <Route path='community' element={<Commnity />} />
+
+          {/* ✅ GPT PAGE */}
+          <Route path='gpt' element={<Gpt />} />
         </Route>
       </Routes>
     </div>

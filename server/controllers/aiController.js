@@ -680,3 +680,48 @@ Requirements:
     });
   }
 };
+// ================== CHAT (GPT PAGE) ==================
+export const chatWithAI = async (req, res) => {
+  try {
+    const { userId } = req.auth();
+    const { messages } = req.body;
+
+    if (!messages || messages.length === 0) {
+      return res.json({
+        success: false,
+        message: "Messages are required",
+      });
+    }
+
+    const systemPrompt = {
+      role: "system",
+      content: `You are a helpful AI assistant like ChatGPT.
+- Answer clearly
+- Use formatting
+- Be concise but helpful`,
+    };
+
+    const finalMessages = [
+      systemPrompt,
+      ...messages.slice(-10) // prevent overflow
+    ];
+
+    const response = await createChatCompletion(finalMessages, 1000);
+
+    const content =
+      response?.choices?.[0]?.message?.content || "No response";
+
+    res.json({
+      success: true,
+      content,
+    });
+
+  } catch (error) {
+    console.log("CHAT ERROR:", error.message);
+
+    res.json({
+      success: false,
+      message: error.message || "Chat failed",
+    });
+  }
+};

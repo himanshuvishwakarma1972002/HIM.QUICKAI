@@ -14,7 +14,10 @@ export const getUserCreations = async (req, res) => {
     res.json({ success: true, creations });
 
   } catch (error) {
-    res.json({ success: false, message: error.message });
+    res.status(500).json({
+  success: false,
+  message: error.message || "Something went wrong"
+});;
   }
 };
 
@@ -29,7 +32,10 @@ export const getPublishedCreations = async (req, res) => {
     res.json({ success: true, creations });
 
   } catch (error) {
-    res.json({ success: false, message: error.message });
+    res.status(500).json({
+  success: false,
+  message: error.message || "Something went wrong"
+});;
   }
 };
 
@@ -65,7 +71,10 @@ export const toggleLikeCreation = async (req, res) => {
     res.json({ success: true });
 
   } catch (error) {
-    res.json({ success: false, message: error.message });
+    res.status(500).json({
+  success: false,
+  message: error.message || "Something went wrong"
+});;
   }
 };
 
@@ -143,6 +152,9 @@ export const getCreationLikes = async (req, res) => {
       likers,
     });
   } catch (error) {
-    res.json({ success: false, message: error.message });
+    res.status(500).json({
+  success: false,
+  message: error.message || "Something went wrong"
+});;
   }
 };

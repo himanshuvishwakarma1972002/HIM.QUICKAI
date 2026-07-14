@@ -1,5 +1,5 @@
 import { SignOutButton, useUser, useClerk } from '@clerk/react'
-import { Eraser, FileText, Hash, House, Image, LogOut, Scissors, SquarePen, Users } from 'lucide-react'
+import { Eraser, FileText, Hash, House, Image, LogOut, Scissors, SquarePen, Users, MessageSquare } from 'lucide-react'
 import React, { useEffect, useRef } from 'react'
 import { NavLink } from 'react-router-dom'
 
@@ -12,6 +12,7 @@ const navItems = [
   { to: '/ai/remove-object', label: 'Remove Object', icon: Scissors },
   { to: '/ai/review-resume', label: 'Resume Studio', icon: FileText },
   { to: '/ai/community', label: 'Community', icon: Users },
+  { to: '/ai/gpt', label: 'GPT', icon: MessageSquare },
 ]
 
 const Sidebar = ({ sidebar, setSidebar }) => {
