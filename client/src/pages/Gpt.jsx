@@ -4,6 +4,8 @@ import axios from 'axios'
 import toast from 'react-hot-toast'
 import { useAuth } from '@clerk/react'
 import { getClerkAuthToken } from '../utils/auth'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 
 axios.defaults.baseURL = import.meta.env.VITE_BASE_URL;
 
@@ -17,12 +19,12 @@ const Gpt = () => {
 
   const { getToken, isSignedIn } = useAuth()
 
-  // ✅ Auto scroll
+  // Auto scroll
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
-  // ✅ Auto focus
+  // Auto focus
   useEffect(() => {
     inputRef.current?.focus()
   }, [])
@@ -37,8 +39,6 @@ const Gpt = () => {
     }
 
     const userMessage = { role: 'user', content: input }
-
-    // ✅ FIX: create updatedMessages FIRST
     const updatedMessages = [...messages, userMessage]
 
     setMessages(updatedMessages)
@@ -69,15 +69,12 @@ const Gpt = () => {
 
     } catch (error) {
       console.log(error)
-      toast.error(
-        error.response?.data?.message || 'Server error'
-      )
+      toast.error(error.response?.data?.message || 'Server error')
     }
 
     setLoading(false)
   }
 
-  // ✅ Enter key support
   const handleKeyDown = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
@@ -112,7 +109,7 @@ const Gpt = () => {
               msg.role === 'user' ? 'justify-end' : ''
             }`}
           >
-            {/* AI */}
+            {/* AI ICON */}
             {msg.role === 'assistant' && (
               <div className="p-2 rounded-lg bg-purple-100 shadow-sm">
                 <Bot className="w-5 h-5 text-purple-600" />
@@ -121,18 +118,42 @@ const Gpt = () => {
 
             {/* MESSAGE */}
             <div
-              className={`max-w-[80%] p-4 rounded-2xl text-sm leading-relaxed shadow-sm
+              className={`max-w-[80%] p-4 rounded-2xl text-sm leading-relaxed shadow-sm overflow-x-auto
               ${msg.role === 'user'
                 ? 'bg-gradient-to-r from-purple-500 to-purple-600 text-white rounded-br-none'
-                : 'bg-white border text-gray-700 rounded-bl-none'}`}
+                : 'bg-white border text-gray-800 rounded-bl-none'}`}
             >
-              {msg.content}
+              {msg.role === 'assistant' ? (
+                <ReactMarkdown
+                remarkPlugins={[remarkGfm]}
+                components={{
+                  code({ inline, children }) {
+                    return inline ? (
+                      <code className="bg-gray-200 px-1 py-0.5 rounded">
+                        {children}
+                      </code>
+                    ) : (
+                      <pre className="bg-black text-green-400 p-3 rounded-lg overflow-x-auto text-xs">
+                        <code>{children}</code>
+                      </pre>
+                    )
+                  }
+                }}
+              >
+                {msg.content
+                  .replace(/```(\w+)?/g, '\n```$1\n') // ✅ fix both start + end
+                  .replace(/\n{3,}/g, '\n\n')         // ✅ remove extra breaks
+                }
+              </ReactMarkdown>
+              ) : (
+                msg.content
+              )}
             </div>
 
-            {/* USER */}
+            {/* USER ICON */}
             {msg.role === 'user' && (
               <div className="p-2 rounded-lg bg-gray-200 shadow-sm">
-                <User className="w-5 h-5 text-gray-700" />
+                <User className="w-5 h-5 text-gray-600" />
               </div>
             )}
           </div>
@@ -140,16 +161,8 @@ const Gpt = () => {
 
         {/* LOADING */}
         {loading && (
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-purple-100">
-              <Bot className="w-5 h-5 text-purple-600" />
-            </div>
-
-            <div className="flex gap-1">
-              <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></span>
-              <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce delay-150"></span>
-              <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce delay-300"></span>
-            </div>
+          <div className="text-sm text-gray-400 animate-pulse">
+            AI is typing...
           </div>
         )}
 
@@ -159,31 +172,26 @@ const Gpt = () => {
       {/* INPUT */}
       <form
         onSubmit={sendMessage}
-        className="p-4 bg-white border-t sticky bottom-0"
+        className="p-4 border-t bg-white flex items-center gap-3"
       >
-        <div className="flex items-center gap-3 max-w-4xl mx-auto bg-gray-100 border rounded-xl px-3 py-2 focus-within:ring-2 focus-within:ring-purple-300 transition">
+        <textarea
+          ref={inputRef}
+          rows="1"
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder="Type your message..."
+          className="flex-1 resize-none border rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+        />
 
-          <input
-            ref={inputRef}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            type="text"
-            placeholder="Ask anything..."
-            className="flex-1 bg-transparent outline-none text-sm px-2"
-          />
-
-          <button
-            type="submit"
-            disabled={loading || !input.trim()}
-            className="p-2 bg-purple-600 text-white rounded-lg hover:opacity-90 disabled:opacity-50 transition"
-          >
-            <Send className="w-4 h-4" />
-          </button>
-
-        </div>
+        <button
+          type="submit"
+          disabled={loading}
+          className="bg-purple-600 hover:bg-purple-700 text-white p-2 rounded-lg disabled:opacity-50"
+        >
+          <Send className="w-5 h-5" />
+        </button>
       </form>
-
     </div>
   )
 }

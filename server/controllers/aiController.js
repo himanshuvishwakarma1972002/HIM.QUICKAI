@@ -708,13 +708,19 @@ export const chatWithAI = async (req, res) => {
 
     const response = await createChatCompletion(finalMessages, 1000);
 
-    const content =
-      response?.choices?.[0]?.message?.content || "No response";
-
-    res.json({
-      success: true,
-      content,
-    });
+    let content =
+    response?.choices?.[0]?.message?.content || "No response";
+  
+  // Ensure clean markdown
+  content = content
+    .replace(/```(\w+)/g, '\n```$1\n') // language fix
+    .replace(/```/g, '\n```')
+    .replace(/\n{3,}/g, '\n\n');
+  
+  res.json({
+    success: true,
+    content,
+  });
 
   } catch (error) {
     console.log("CHAT ERROR:", error.message);
