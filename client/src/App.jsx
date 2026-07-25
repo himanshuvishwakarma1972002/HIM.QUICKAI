@@ -10,7 +10,7 @@ import RemoveBackground from './pages/RemoveBackground'
 import RemoveObject from './pages/RemoveObject'
 import ReviewResime from './pages/ReviewResime'
 import Commnity from './pages/Commnity'
-import Gpt from './pages/Gpt.jsx'
+import AiChat from './pages/AiChat.jsx'
 import { Toaster } from 'react-hot-toast'
 import { useAuth } from '@clerk/react'
 
@@ -35,7 +35,30 @@ const App = () => {
 
   return (
     <div>
-      <Toaster />
+      <Toaster
+        position="top-right"
+        reverseOrder={false}
+        gutter={10}
+        containerStyle={{
+          top: 80,
+          right: 16,
+          zIndex: 99999,
+        }}
+        toastOptions={{
+          duration: 4500,
+          style: {
+            maxWidth: 360,
+            fontSize: 13,
+            padding: '10px 14px',
+          },
+          error: {
+            duration: 6000,
+            style: {
+              maxWidth: 380,
+            },
+          },
+        }}
+      />
 
       <Routes>
         <Route path='/' element={<Home />} />
@@ -50,8 +73,8 @@ const App = () => {
           <Route path='review-resume' element={<ReviewResime />} />
           <Route path='community' element={<Commnity />} />
 
-          {/* ✅ GPT PAGE */}
-          <Route path='gpt' element={<Gpt />} />
+          {/* ✅ GPT / AI CHAT PAGE */}
+          <Route path='gpt' element={<AiChat />} />
         </Route>
       </Routes>
     </div>

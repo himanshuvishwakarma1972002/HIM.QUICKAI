@@ -12,7 +12,7 @@ import {
 } from '../controllers/aiController.js';
 
 import { upload } from '../configs/multer.js';
-import resumeUpload from '../middlewares/upload.js';
+import resumeUpload, { chatUpload } from '../middlewares/upload.js';
 
 const aiRouter = express.Router();
 
@@ -36,8 +36,25 @@ aiRouter.post(
   removeImageObject
 );
 
-// ✅ CHAT ROUTE (MOST IMPORTANT)
-aiRouter.post('/chat', auth, chatWithAI);
+const handleChatUpload = (req, res, next) => {
+  chatUpload.array('files', 5)(req, res, (err) => {
+    if (err) {
+      return res.status(400).json({
+        success: false,
+        message:
+          err.code === 'LIMIT_FILE_SIZE'
+            ? 'File too large (max 10MB)'
+            : err.code === 'LIMIT_FILE_COUNT'
+              ? 'You can attach up to 5 files'
+              : err.message || 'Upload failed',
+      });
+    }
+    next();
+  });
+};
+
+// ✅ CHAT ROUTE — multer required so FormData body + files are parsed
+aiRouter.post('/chat', handleChatUpload, auth, chatWithAI);
 
 // ✅ Resume Upload Handler
 const handleResumeUpload = (req, res, next) => {

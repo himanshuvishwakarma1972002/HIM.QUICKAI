@@ -7,20 +7,24 @@ import FormData from "form-data";
 import { extractResumeText } from "../utils/resumeText.js";
 import { clerkClient } from "@clerk/express";
 import OpenAI from "openai";
-
+import { GoogleGenAI } from "@google/genai";
 
 
 const AI = new OpenAI({
     apiKey: process.env.GEMINI_API_KEY,
-    baseURL: "https://generativelanguage.googleapis.com/v1beta",
+    baseURL: "https://generativelanguage.googleapis.com/v1beta/openai",
 });
-const GEMINI_MODEL = (process.env.GEMINI_MODEL || "gemini-3-flash-preview").replace(/"/g, "").trim();
+const GEMINI_MODEL = (process.env.GEMINI_MODEL || "gemini-2.0-flash").replace(/"/g, "").trim();
+const IMAGE_MODEL = (process.env.GEMINI_IMAGE_MODEL || "gemini-2.5-flash-image").replace(/"/g, "").trim();
+const VIDEO_MODEL = (process.env.GEMINI_VIDEO_MODEL || "veo-3.1-fast-generate-preview").replace(/"/g, "").trim();
 const FALLBACK_MODELS = [...new Set([
   GEMINI_MODEL,
   "gemini-2.0-flash",
   "gemini-1.5-flash-002",
   "gemini-1.5-pro",
 ])];
+
+const genAI = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
 const createChatCompletion = async (messages, maxTokens) => {
   let lastError;
@@ -681,53 +685,464 @@ Requirements:
   }
 };
 // ================== CHAT (GPT PAGE) ==================
+const parseChatMessages = (raw) => {
+  if (!raw) return [];
+  if (Array.isArray(raw)) return raw;
+  if (typeof raw === "string") {
+    try {
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+};
+
+const detectMediaIntent = (text = "", forcedMode = "auto") => {
+  const mode = (forcedMode || "auto").toLowerCase();
+  if (mode === "image" || mode === "video" || mode === "chat") return mode;
+
+  const t = text.toLowerCase();
+
+  if (
+    /\b(generate|create|make|render|produce|animate)\b.{0,40}\b(video|clip|reel|animation|mp4)\b/.test(t) ||
+    /\b(video|clip|reel|animation)\b.{0,40}\b(generate|create|make|of|about|showing)\b/.test(t) ||
+    /\b(text[\s-]?to[\s-]?video)\b/.test(t)
+  ) {
+    return "video";
+  }
+
+  if (
+    /\b(generate|create|make|draw|design|paint|imagine|render)\b.{0,40}\b(image|picture|photo|illustration|artwork|logo|poster|thumbnail)\b/.test(t) ||
+    /\b(image|picture|photo|illustration|logo)\b.{0,40}\b(of|about|showing|with)\b/.test(t) ||
+    /\b(text[\s-]?to[\s-]?image)\b/.test(t)
+  ) {
+    return "image";
+  }
+
+  return "chat";
+};
+
+const extractGenerationPrompt = (text = "") => {
+  return text
+    .replace(
+      /^(please\s+)?(can you\s+)?(generate|create|make|draw|design|paint|imagine|render|produce|animate)\s+(me\s+)?(an?\s+)?(image|picture|photo|illustration|artwork|logo|poster|thumbnail|video|clip|reel|animation)\s*(of|about|showing|with|:)?\s*/i,
+      ""
+    )
+    .trim() || text.trim();
+};
+
+const buildChatFileContext = async (files = []) => {
+  const textParts = [];
+  const imageParts = [];
+
+  for (const file of files) {
+    const name = file.originalname || "file";
+    const mime = file.mimetype || "";
+
+    if (mime.startsWith("image/")) {
+      const base64 = file.buffer.toString("base64");
+      imageParts.push({
+        type: "image_url",
+        image_url: {
+          url: `data:${mime};base64,${base64}`,
+        },
+      });
+      textParts.push(`[Attached image: ${name}]`);
+      continue;
+    }
+
+    try {
+      const extracted = await extractResumeText(file.buffer, name);
+      textParts.push(
+        `\n--- File: ${name} ---\n${extracted.trim() || "(No extractable text)"}\n---`
+      );
+    } catch (err) {
+      textParts.push(
+        `\n--- File: ${name} ---\n(Could not extract text: ${err.message})\n---`
+      );
+    }
+  }
+
+  return { textParts, imageParts };
+};
+
+const uploadBase64Image = async (base64, folder = "chat_images") => {
+  const upload = await cloudinary.uploader.upload(
+    `data:image/png;base64,${base64}`,
+    { folder }
+  );
+  return upload.secure_url;
+};
+
+const generateChatImage = async (prompt, userId) => {
+  try {
+    const image = await AI.images.generate({
+      model: IMAGE_MODEL,
+      prompt,
+      response_format: "b64_json",
+      n: 1,
+    });
+
+    const b64 = image?.data?.[0]?.b64_json;
+    if (!b64) throw new Error("No image data from Gemini");
+
+    const imageUrl = await uploadBase64Image(b64);
+
+    await sql`
+      INSERT INTO creations (user_id, prompt, content, type, publish)
+      VALUES (${userId}, ${prompt}, ${imageUrl}, 'image', false)
+    `;
+
+    return imageUrl;
+  } catch (geminiErr) {
+    console.log("GEMINI IMAGE FALLBACK:", geminiErr?.message);
+
+    // Fallback to Clipdrop (existing pipeline)
+    const formData = new FormData();
+    formData.append("prompt", prompt);
+
+    const response = await axios.post(
+      "https://clipdrop-api.co/text-to-image/v1",
+      formData,
+      {
+        headers: {
+          "x-api-key": process.env.CLIPDROP_API_KEY,
+          ...formData.getHeaders(),
+        },
+        responseType: "arraybuffer",
+      }
+    );
+
+    const base64 = Buffer.from(response.data).toString("base64");
+    const imageUrl = await uploadBase64Image(base64);
+
+    await sql`
+      INSERT INTO creations (user_id, prompt, content, type, publish)
+      VALUES (${userId}, ${prompt}, ${imageUrl}, 'image', false)
+    `;
+
+    return imageUrl;
+  }
+};
+
+const formatAiError = (error) => {
+  const raw =
+    error?.error?.message ||
+    error?.message ||
+    error?.response?.data?.error?.message ||
+    (typeof error === "string" ? error : "") ||
+    "AI request failed";
+
+  let parsed = null;
+  try {
+    parsed = typeof raw === "string" && raw.trim().startsWith("{")
+      ? JSON.parse(raw)
+      : null;
+  } catch {
+    const match = String(raw).match(/\{[\s\S]*"error"[\s\S]*\}/);
+    if (match) {
+      try {
+        parsed = JSON.parse(match[0]);
+      } catch {
+        parsed = null;
+      }
+    }
+  }
+
+  const code =
+    parsed?.error?.code ||
+    error?.status ||
+    error?.code ||
+    error?.response?.status;
+  const msg = parsed?.error?.message || String(raw);
+
+  if (
+    code === 429 ||
+    /RESOURCE_EXHAUSTED|exceeded your current quota|rate.?limit/i.test(
+      `${msg} ${raw}`
+    )
+  ) {
+    return {
+      code: 429,
+      message:
+        "Gemini API quota exceeded for this feature. Please wait a bit, check billing at ai.google.dev, or try Image / Chat mode instead.",
+    };
+  }
+
+  if (code === 403 || /PERMISSION_DENIED|not enabled|access/i.test(msg)) {
+    return {
+      code: 403,
+      message:
+        "This model is not available on your Gemini API key. Enable Veo/video access in Google AI Studio, or use Image mode.",
+    };
+  }
+
+  // Keep user-facing text short — strip nested JSON blobs
+  const clean = msg.replace(/\{[\s\S]*\}/g, "").trim();
+  return {
+    code: code || 500,
+    message: clean || "Generation failed. Please try again.",
+  };
+};
+
+const generateChatVideo = async (prompt, userId) => {
+  let operation;
+  try {
+    operation = await genAI.models.generateVideos({
+      model: VIDEO_MODEL,
+      prompt,
+    });
+  } catch (err) {
+    throw Object.assign(new Error(formatAiError(err).message), {
+      status: formatAiError(err).code,
+    });
+  }
+
+  const maxPolls = 36; // ~5 min at 8s
+  let polls = 0;
+
+  while (!operation.done && polls < maxPolls) {
+    await new Promise((resolve) => setTimeout(resolve, 8000));
+    try {
+      operation = await genAI.operations.getVideosOperation({ operation });
+    } catch (err) {
+      throw Object.assign(new Error(formatAiError(err).message), {
+        status: formatAiError(err).code,
+      });
+    }
+    polls += 1;
+  }
+
+  if (!operation.done) {
+    throw new Error("Video generation timed out. Please try a shorter prompt.");
+  }
+
+  const generated = operation.response?.generatedVideos?.[0];
+  const videoMeta = generated?.video;
+
+  if (!videoMeta) {
+    throw new Error(
+      "No video returned from Veo. Your API key may not have video access yet."
+    );
+  }
+
+  let videoUrl;
+
+  if (videoMeta.uri) {
+    const downloadUrl = videoMeta.uri.includes("?")
+      ? `${videoMeta.uri}&key=${process.env.GEMINI_API_KEY}`
+      : `${videoMeta.uri}?key=${process.env.GEMINI_API_KEY}`;
+
+    const videoRes = await axios.get(downloadUrl, {
+      responseType: "arraybuffer",
+      timeout: 120000,
+    });
+
+    const upload = await cloudinary.uploader.upload(
+      `data:video/mp4;base64,${Buffer.from(videoRes.data).toString("base64")}`,
+      {
+        folder: "chat_videos",
+        resource_type: "video",
+      }
+    );
+    videoUrl = upload.secure_url;
+  } else if (videoMeta.videoBytes) {
+    const upload = await cloudinary.uploader.upload(
+      `data:video/mp4;base64,${videoMeta.videoBytes}`,
+      {
+        folder: "chat_videos",
+        resource_type: "video",
+      }
+    );
+    videoUrl = upload.secure_url;
+  } else {
+    throw new Error("Video file could not be downloaded");
+  }
+
+  await sql`
+    INSERT INTO creations (user_id, prompt, content, type, publish)
+    VALUES (${userId}, ${prompt}, ${videoUrl}, 'video', false)
+  `;
+
+  return videoUrl;
+};
+
 export const chatWithAI = async (req, res) => {
   try {
     const { userId } = req.auth();
-    const { messages } = req.body;
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized",
+      });
+    }
 
-    if (!messages || messages.length === 0) {
+    const messages = parseChatMessages(req.body?.messages);
+    const files = Array.isArray(req.files) ? req.files : [];
+    const forcedMode = (req.body?.mode || "auto").toLowerCase();
+
+    if (!messages.length && !files.length) {
       return res.json({
         success: false,
-        message: "Messages are required",
+        message: "Messages or files are required",
+      });
+    }
+
+    const lastUserText =
+      [...messages].reverse().find((m) => m?.role === "user")?.content || "";
+    const intent = detectMediaIntent(lastUserText, forcedMode);
+    const generationPrompt = extractGenerationPrompt(lastUserText);
+
+    // ===== IMAGE GENERATION =====
+    if (intent === "image") {
+      if (!generationPrompt) {
+        return res.json({
+          success: false,
+          message: "Please describe the image you want to generate",
+        });
+      }
+
+      try {
+        const imageUrl = await generateChatImage(generationPrompt, userId);
+
+        return res.json({
+          success: true,
+          content: `Here's the image I generated for: **${generationPrompt}**`,
+          mediaType: "image",
+          mediaUrl: imageUrl,
+        });
+      } catch (imageError) {
+        const formatted = formatAiError(imageError);
+        console.log("IMAGE ERROR:", formatted.message);
+        return res.json({
+          success: false,
+          message: formatted.message,
+        });
+      }
+    }
+
+    // ===== VIDEO GENERATION =====
+    if (intent === "video") {
+      if (!generationPrompt) {
+        return res.json({
+          success: false,
+          message: "Please describe the video you want to generate",
+        });
+      }
+
+      try {
+        const videoUrl = await generateChatVideo(generationPrompt, userId);
+
+        return res.json({
+          success: true,
+          content: `Here's the video I generated for: **${generationPrompt}**\n\n_Note: Video generation can take up to a couple of minutes._`,
+          mediaType: "video",
+          mediaUrl: videoUrl,
+        });
+      } catch (videoError) {
+        const formatted = formatAiError(videoError);
+        console.log("VIDEO ERROR:", formatted.message);
+
+        // Quota / access issues → try an image so the user still gets something useful
+        if (formatted.code === 429 || formatted.code === 403) {
+          try {
+            const imageUrl = await generateChatImage(generationPrompt, userId);
+            return res.json({
+              success: true,
+              content: `Video generation is unavailable right now (**${formatted.code === 429 ? "API quota exceeded" : "model access denied"}**).\n\nI created an **image** from your prompt instead:\n\n**${generationPrompt}**\n\n_Tip: check [Gemini rate limits](https://ai.google.dev/gemini-api/docs/rate-limits) or try again later for video._`,
+              mediaType: "image",
+              mediaUrl: imageUrl,
+              warning: formatted.message,
+            });
+          } catch (imageFallbackError) {
+            console.log("IMAGE FALLBACK ERROR:", imageFallbackError?.message);
+          }
+        }
+
+        return res.json({
+          success: false,
+          message: formatted.message,
+        });
+      }
+    }
+
+    // ===== NORMAL CHAT =====
+    const { textParts, imageParts } = await buildChatFileContext(files);
+    const history = messages
+      .filter((m) => m && (m.role === "user" || m.role === "assistant"))
+      .slice(-10)
+      .map((m) => ({
+        role: m.role,
+        content: typeof m.content === "string" ? m.content : String(m.content || ""),
+      }));
+
+    if (history.length && (textParts.length || imageParts.length)) {
+      const last = history[history.length - 1];
+      if (last.role === "user") {
+        const combinedText = [last.content, ...textParts]
+          .filter(Boolean)
+          .join("\n\n")
+          .trim();
+
+        if (imageParts.length) {
+          last.content = [
+            { type: "text", text: combinedText || "Please analyze the attached file(s)." },
+            ...imageParts,
+          ];
+        } else {
+          last.content = combinedText || "Please analyze the attached file(s).";
+        }
+      }
+    } else if (!history.length && (textParts.length || imageParts.length)) {
+      const combinedText = textParts.join("\n\n").trim();
+      history.push({
+        role: "user",
+        content: imageParts.length
+          ? [
+              {
+                type: "text",
+                text: combinedText || "Please analyze the attached file(s).",
+              },
+              ...imageParts,
+            ]
+          : combinedText || "Please analyze the attached file(s).",
       });
     }
 
     const systemPrompt = {
       role: "system",
-      content: `You are a helpful AI assistant like ChatGPT.
-- Answer clearly
-- Use formatting
-- Be concise but helpful`,
+      content: `You are Him.AI — a multimodal assistant like Gemini.
+- Answer clearly with markdown when helpful
+- When files are attached, use their content
+- Users can also ask you to generate images or videos (handled separately by the system)
+- Be concise, accurate, and helpful`,
     };
 
-    const finalMessages = [
-      systemPrompt,
-      ...messages.slice(-10) // prevent overflow
-    ];
-
-    const response = await createChatCompletion(finalMessages, 1000);
+    const finalMessages = [systemPrompt, ...history];
+    const response = await createChatCompletion(finalMessages, 1500);
 
     let content =
-    response?.choices?.[0]?.message?.content || "No response";
-  
-  // Ensure clean markdown
-  content = content
-    .replace(/```(\w+)/g, '\n```$1\n') // language fix
-    .replace(/```/g, '\n```')
-    .replace(/\n{3,}/g, '\n\n');
-  
-  res.json({
-    success: true,
-    content,
-  });
+      response?.choices?.[0]?.message?.content || "No response";
 
+    content = content
+      .replace(/```(\w+)/g, "\n```$1\n")
+      .replace(/```/g, "\n```")
+      .replace(/\n{3,}/g, "\n\n");
+
+    res.json({
+      success: true,
+      content,
+      mediaType: "text",
+    });
   } catch (error) {
-    console.log("CHAT ERROR:", error.message);
+    const formatted = formatAiError(error);
+    console.log("CHAT ERROR:", formatted.message);
 
     res.json({
       success: false,
-      message: error.message || "Chat failed",
+      message: formatted.message,
     });
   }
 };

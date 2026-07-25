@@ -23,7 +23,8 @@ app.use(clerkMiddleware());
 
 // ✅ Timeout for AI responses
 app.use((req, res, next) => {
-  res.setTimeout(120000);
+  // Video generation (Veo) can take several minutes
+  res.setTimeout(360000);
   next();
 });
 
