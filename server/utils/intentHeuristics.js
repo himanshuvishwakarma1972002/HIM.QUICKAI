@@ -5,13 +5,15 @@ const normalizeText = (text = "") =>
     .replace(/\bfilms?\b/g, (m) => m)
     .trim();
 
-const wantsVideoGeneration = (t) =>
-  /\b(generate|create|make|render|produce|animate|text[\s-]?to[\s-]?video)\b.{0,40}\b(video|clip|reel|animation|mp4)\b/.test(t) ||
-  /\b(video|clip|reel|animation)\b.{0,40}\b(generate|create|make|of|about|showing)\b/.test(t);
+export const wantsVideoGeneration = (t) =>
+  /\b(text[\s-]?to[\s-]?video)\b/.test(t) ||
+  /\b(generate|create|make|render|produce|animate)\b.{0,50}\b(an?\s+)?(ai\s+)?(video|clip|reel|animation|mp4)\b/.test(t) ||
+  /\b(video|clip|reel|animation)\b.{0,20}\b(generate|create|make|render|produce|animate)\b/.test(t);
 
-const wantsImageGeneration = (t) =>
-  /\b(generate|create|make|draw|design|paint|imagine|render|text[\s-]?to[\s-]?image)\b.{0,40}\b(image|picture|photo|illustration|artwork|logo|poster|thumbnail)\b/.test(t) ||
-  /\b(image|picture|photo|illustration|logo)\b.{0,40}\b(of|about|showing|with)\b/.test(t);
+export const wantsImageGeneration = (t) =>
+  /\b(text[\s-]?to[\s-]?image)\b/.test(t) ||
+  /\b(generate|create|make|draw|design|paint|imagine|render)\b.{0,50}\b(an?\s+)?(image|picture|photo|illustration|artwork|logo|poster|thumbnail)\b/.test(t) ||
+  /\b(image|picture|photo|illustration|logo)\b.{0,20}\b(generate|create|make|draw|design)\b/.test(t);
 
 export const isMovieSearchQuery = (text = "") => {
   const t = normalizeText(text);
@@ -47,8 +49,14 @@ export const isVisualGenerationPrompt = (text = "") => {
   if (isMovieSearchQuery(text) || isYouTubeSearchQuery(text) || isWebSearchQuery(text)) {
     return false;
   }
-  return wantsVideoGeneration(t) || wantsImageGeneration(t) || !/\b(movie|movies|film|bollywood|news|tutorial|search|find|show|give|latest)\b/.test(t);
+  return wantsVideoGeneration(t) || wantsImageGeneration(t);
 };
+
+export const isExplicitVideoRequest = (text = "", mode = "auto") =>
+  (mode || "").toLowerCase() === "video" || wantsVideoGeneration(normalizeText(text));
+
+export const isExplicitImageRequest = (text = "", mode = "auto") =>
+  (mode || "").toLowerCase() === "image" || wantsImageGeneration(normalizeText(text));
 
 export const detectHeuristicIntent = (text = "") => {
   const t = normalizeText(text);
@@ -75,18 +83,32 @@ export const detectHeuristicIntent = (text = "") => {
 
 export const correctRoutedIntents = (text = "", items = []) => {
   const heuristic = detectHeuristicIntent(text);
-  if (!heuristic) return items;
+  const t = normalizeText(text);
 
-  const hasWrongMedia = items.some((i) =>
-    ["video_generation", "image_generation"].includes(i.intent)
-  );
-  const hasSearch = items.some((i) =>
-    ["movie_search", "youtube_search", "web_search"].includes(i.intent)
-  );
+  let next = Array.isArray(items) ? [...items] : [];
 
-  if (hasWrongMedia && !hasSearch && ["movie_search", "youtube_search", "web_search"].includes(heuristic.intent)) {
-    return [heuristic];
+  if (heuristic) {
+    const hasWrongMedia = next.some((i) =>
+      ["video_generation", "image_generation"].includes(i.intent)
+    );
+    const hasSearch = next.some((i) =>
+      ["movie_search", "youtube_search", "web_search"].includes(i.intent)
+    );
+
+    if (hasWrongMedia && !hasSearch && ["movie_search", "youtube_search", "web_search"].includes(heuristic.intent)) {
+      return [heuristic];
+    }
   }
 
-  return items;
+  next = next.map((item) => {
+    if (item.intent === "video_generation" && !wantsVideoGeneration(t)) {
+      return { ...item, intent: "chat" };
+    }
+    if (item.intent === "image_generation" && !wantsImageGeneration(t)) {
+      return { ...item, intent: "chat" };
+    }
+    return item;
+  });
+
+  return next.length ? next : [{ intent: "chat", query: text.trim(), language: "en", filters: {} }];
 };

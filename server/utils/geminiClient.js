@@ -12,9 +12,12 @@ const GEMINI_MODEL = (process.env.GEMINI_MODEL || "gemini-2.0-flash")
 const FALLBACK_MODELS = [
   ...new Set([
     GEMINI_MODEL,
+    "gemini-2.5-flash",
     "gemini-2.0-flash",
+    "gemini-2.0-flash-001",
+    "gemini-flash-latest",
+    "gemini-1.5-flash",
     "gemini-1.5-flash-002",
-    "gemini-1.5-pro",
   ]),
 ];
 
@@ -29,6 +32,7 @@ export const createChatCompletion = async (messages, maxTokens = 1500) => {
         max_tokens: maxTokens,
       });
     } catch (error) {
+      console.warn(`GEMINI MODEL FAILED (${model}):`, error?.message || error);
       lastError = error;
     }
   }

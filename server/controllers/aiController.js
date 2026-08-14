@@ -14,7 +14,7 @@ import { searchMovies } from "../services/movieSearchService.js";
 import { searchYouTube } from "../services/youtubeSearchService.js";
 import { searchWeb } from "../services/webSearchService.js";
 import { summarizeSearchResults } from "../services/searchSummaryService.js";
-import { isVisualGenerationPrompt } from "../utils/intentHeuristics.js";
+import { isExplicitVideoRequest, isExplicitImageRequest } from "../utils/intentHeuristics.js";
 
 
 const AI = new OpenAI({
@@ -855,10 +855,12 @@ const formatAiError = (error) => {
   }
 
   if (code === 403 || /PERMISSION_DENIED|not enabled|access/i.test(msg)) {
+    const isVeo = /veo|video|generateVideos/i.test(`${msg} ${raw}`);
     return {
       code: 403,
-      message:
-        "This model is not available on your Gemini API key. Enable Veo/video access in Google AI Studio, or use Image mode.",
+      message: isVeo
+        ? "AI video generation is not available on this Gemini API key. Use Chat or Image mode instead."
+        : "This Gemini model is not available for the current API key. Check GEMINI_MODEL in the server environment, or try again shortly.",
     };
   }
 
@@ -1087,7 +1089,8 @@ export const chatWithAI = async (req, res) => {
 
     const messages = parseChatMessages(req.body?.messages);
     const files = Array.isArray(req.files) ? req.files : [];
-    const forcedMode = (req.body?.mode || "auto").toLowerCase();
+    const rawMode = Array.isArray(req.body?.mode) ? req.body.mode[0] : req.body?.mode;
+    const forcedMode = String(rawMode || "auto").toLowerCase();
 
     if (!messages.length && !files.length) {
       return res.json({
@@ -1108,9 +1111,29 @@ export const chatWithAI = async (req, res) => {
     const hasSearchIntent = routedIntents.some((i) =>
       ["web_search", "movie_search", "youtube_search"].includes(i.intent)
     );
-    const imageIntent = routedIntents.find((i) => i.intent === "image_generation");
-    const videoIntent = routedIntents.find((i) => i.intent === "video_generation");
+    const imageIntent =
+      routedIntents.find((i) => i.intent === "image_generation") &&
+      isExplicitImageRequest(lastUserText, forcedMode)
+        ? routedIntents.find((i) => i.intent === "image_generation")
+        : forcedMode === "image"
+          ? { intent: "image_generation", query: lastUserText }
+          : null;
+    const videoIntent =
+      routedIntents.find((i) => i.intent === "video_generation") &&
+      isExplicitVideoRequest(lastUserText, forcedMode)
+        ? routedIntents.find((i) => i.intent === "video_generation")
+        : forcedMode === "video"
+          ? { intent: "video_generation", query: lastUserText }
+          : null;
     const language = routedIntents[0]?.language || "en";
+
+    console.log("CHAT INTENT:", {
+      forcedMode,
+      routed: routedIntents.map((i) => i.intent),
+      image: Boolean(imageIntent),
+      video: Boolean(videoIntent),
+      search: hasSearchIntent,
+    });
 
     const generationPrompt = extractGenerationPrompt(
       imageIntent?.query || videoIntent?.query || lastUserText
@@ -1190,26 +1213,7 @@ export const chatWithAI = async (req, res) => {
           return res.json(ytFallback);
         }
 
-        // Last resort: image fallback for visual-only prompts
-        if ((formatted.code === 429 || formatted.code === 403) && isVisualGenerationPrompt(generationPrompt)) {
-          try {
-            const imageUrl = await generateChatImage(generationPrompt, userId);
-            return res.json({
-              success: true,
-              content: `Video generation is unavailable right now (**${formatted.code === 429 ? "API quota exceeded" : "model access denied"}**).\n\nNo related YouTube videos were found. I created an **image** from your prompt instead:\n\n**${generationPrompt}**\n\n_Tip: check [Gemini rate limits](https://ai.google.dev/gemini-api/docs/rate-limits) or try again later for video._`,
-              mediaType: "image",
-              mediaUrl: imageUrl,
-              warning: formatted.message,
-            });
-          } catch (imageFallbackError) {
-            console.log("IMAGE FALLBACK ERROR:", imageFallbackError?.message);
-          }
-        }
-
-        return res.json({
-          success: false,
-          message: `${formatted.message} No related YouTube videos were found either. Try **Search** mode or a different prompt.`,
-        });
+        console.log("VIDEO UNAVAILABLE — falling back to normal chat");
       }
     }
 
@@ -1262,7 +1266,8 @@ export const chatWithAI = async (req, res) => {
 - Answer clearly with markdown when helpful
 - When files are attached, use their content
 - Users can also ask you to generate images or videos (handled separately by the system)
-- Be concise, accurate, and helpful`,
+- Be concise, accurate, and helpful
+- Do not claim you generated a video unless a video file was actually created`,
     };
 
     const finalMessages = [systemPrompt, ...history];
@@ -1281,13 +1286,16 @@ export const chatWithAI = async (req, res) => {
       content,
       mediaType: "text",
     });
-  } catch (error) {
-    const formatted = formatAiError(error);
-    console.log("CHAT ERROR:", formatted.message);
+    } catch (error) {
+      const formatted = formatAiError(error);
+      console.log("CHAT ERROR:", formatted.message);
 
-    res.json({
-      success: false,
-      message: formatted.message,
-    });
-  }
+      res.json({
+        success: false,
+        message:
+          formatted.code === 403
+            ? "Chat model is unavailable on this server API key. Set GEMINI_MODEL to gemini-2.5-flash or gemini-2.0-flash in production and redeploy."
+            : formatted.message,
+      });
+    }
 };
