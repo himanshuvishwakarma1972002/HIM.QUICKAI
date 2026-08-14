@@ -52,11 +52,30 @@ export const isVisualGenerationPrompt = (text = "") => {
   return wantsVideoGeneration(t) || wantsImageGeneration(t);
 };
 
-export const isExplicitVideoRequest = (text = "", mode = "auto") =>
-  (mode || "").toLowerCase() === "video" || wantsVideoGeneration(normalizeText(text));
+export const looksLikeChatQuestion = (text = "") => {
+  const t = normalizeText(text);
+  if (!t) return false;
+  if (wantsVideoGeneration(t) || wantsImageGeneration(t)) return false;
+  return (
+    /\?/.test(t) ||
+    /^(hi|hello|hey|yo|thanks|thank you)\b/.test(t) ||
+    /^(what|why|how|who|when|where|which|explain|tell me|define|describe|write|help|summarize|list|give me|can you|could you|please)\b/.test(t)
+  );
+};
 
-export const isExplicitImageRequest = (text = "", mode = "auto") =>
-  (mode || "").toLowerCase() === "image" || wantsImageGeneration(normalizeText(text));
+export const isExplicitVideoRequest = (text = "", mode = "auto") => {
+  const t = normalizeText(text);
+  if (wantsVideoGeneration(t)) return true;
+  if ((mode || "").toLowerCase() !== "video") return false;
+  return Boolean(t) && !looksLikeChatQuestion(t);
+};
+
+export const isExplicitImageRequest = (text = "", mode = "auto") => {
+  const t = normalizeText(text);
+  if (wantsImageGeneration(t)) return true;
+  if ((mode || "").toLowerCase() !== "image") return false;
+  return Boolean(t) && !looksLikeChatQuestion(t);
+};
 
 export const detectHeuristicIntent = (text = "") => {
   const t = normalizeText(text);

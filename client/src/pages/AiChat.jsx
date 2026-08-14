@@ -399,7 +399,12 @@ const AiChat = () => {
 
       const formData = new FormData()
       formData.append('messages', JSON.stringify(historyForRequest))
-      formData.append('mode', mode)
+      formData.append(
+        'mode',
+        mode === 'video' && /[?]|(what|why|how|who|explain|tell me|define)/i.test(userText)
+          ? 'auto'
+          : mode
+      )
 
       currentAttachments.forEach((file) => {
         formData.append('files', file)
@@ -419,7 +424,10 @@ const AiChat = () => {
 
       if (data.success) {
         setMessages((prev) => [...prev, buildAssistantMessage(data)])
-        if (data.warning) {
+        if (data.switchToMode === 'auto' || data.videoQuotaExceeded) {
+          setMode('auto')
+          toast('Video generation quota exceeded — switched to Auto chat')
+        } else if (data.warning) {
           toast(data.warning, {
             icon: '⚠️',
             duration: 5000,
@@ -533,6 +541,11 @@ const AiChat = () => {
               })}
             </div>
           </div>
+          {mode === 'video' && (
+            <p className="mt-2 text-xs text-amber-700">
+              Video mode is on — this uses Veo and can hit quota. Switch to <strong>Auto</strong> or <strong>Chat</strong> for normal GPT answers.
+            </p>
+          )}
         </header>
 
         <main className="min-h-0 flex-1 overflow-hidden">

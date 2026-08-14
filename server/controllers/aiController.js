@@ -24,7 +24,17 @@ const AI = new OpenAI({
 const IMAGE_MODEL = (process.env.GEMINI_IMAGE_MODEL || "gemini-2.5-flash-image").replace(/"/g, "").trim();
 const VIDEO_MODEL = (process.env.GEMINI_VIDEO_MODEL || "veo-3.1-fast-generate-preview").replace(/"/g, "").trim();
 
-const genAI = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+const VIDEO_QUOTA_COOLDOWN_MS = 30 * 60 * 1000;
+let videoQuotaBlockedUntil = 0;
+
+const isVideoQuotaBlocked = () => Date.now() < videoQuotaBlockedUntil;
+
+const markVideoQuotaBlocked = () => {
+  videoQuotaBlockedUntil = Date.now() + VIDEO_QUOTA_COOLDOWN_MS;
+  console.warn(
+    `VIDEO QUOTA BLOCKED until ${new Date(videoQuotaBlockedUntil).toISOString()}`
+  );
+};
 
 const buildResumeFallbackReview = (resumeText) => {
   const text = (resumeText || "").toLowerCase();
@@ -1115,16 +1125,12 @@ export const chatWithAI = async (req, res) => {
       routedIntents.find((i) => i.intent === "image_generation") &&
       isExplicitImageRequest(lastUserText, forcedMode)
         ? routedIntents.find((i) => i.intent === "image_generation")
-        : forcedMode === "image"
-          ? { intent: "image_generation", query: lastUserText }
-          : null;
+        : null;
     const videoIntent =
       routedIntents.find((i) => i.intent === "video_generation") &&
       isExplicitVideoRequest(lastUserText, forcedMode)
         ? routedIntents.find((i) => i.intent === "video_generation")
-        : forcedMode === "video"
-          ? { intent: "video_generation", query: lastUserText }
-          : null;
+        : null;
     const language = routedIntents[0]?.language || "en";
 
     console.log("CHAT INTENT:", {
@@ -1140,7 +1146,7 @@ export const chatWithAI = async (req, res) => {
     );
 
     // ===== SEARCH (web / movies / YouTube) =====
-    if (hasSearchIntent && forcedMode !== "image" && forcedMode !== "video") {
+    if (hasSearchIntent && !imageIntent && !videoIntent) {
       const searchIntents = routedIntents.filter((i) =>
         ["web_search", "movie_search", "youtube_search"].includes(i.intent)
       );
@@ -1182,38 +1188,47 @@ export const chatWithAI = async (req, res) => {
 
     // ===== VIDEO GENERATION =====
     if (videoIntent && forcedMode !== "search") {
-      if (!generationPrompt) {
+      if (isVideoQuotaBlocked()) {
+        console.log("VIDEO SKIPPED — quota cooldown active, using chat");
+      } else if (!generationPrompt) {
         return res.json({
           success: false,
           message: "Please describe the video you want to generate",
         });
-      }
+      } else {
+        try {
+          const videoUrl = await generateChatVideo(generationPrompt, userId);
 
-      try {
-        const videoUrl = await generateChatVideo(generationPrompt, userId);
+          return res.json({
+            success: true,
+            content: `Here's the video I generated for: **${generationPrompt}**\n\n_Note: Video generation can take up to a couple of minutes._`,
+            mediaType: "video",
+            mediaUrl: videoUrl,
+          });
+        } catch (videoError) {
+          const formatted = formatAiError(videoError);
+          console.log("VIDEO ERROR:", formatted.message);
 
-        return res.json({
-          success: true,
-          content: `Here's the video I generated for: **${generationPrompt}**\n\n_Note: Video generation can take up to a couple of minutes._`,
-          mediaType: "video",
-          mediaUrl: videoUrl,
-        });
-      } catch (videoError) {
-        const formatted = formatAiError(videoError);
-        console.log("VIDEO ERROR:", formatted.message);
+          if (formatted.code === 429) {
+            markVideoQuotaBlocked();
+          }
 
-        // YouTube links fallback — always try so user gets watchable videos
-        const ytFallback = await buildYouTubeVideoFallback(
-          generationPrompt,
-          lastUserText,
-          language,
-          formatted.message
-        );
-        if (ytFallback) {
-          return res.json(ytFallback);
+          const ytFallback = await buildYouTubeVideoFallback(
+            generationPrompt,
+            lastUserText,
+            language,
+            formatted.message
+          );
+          if (ytFallback) {
+            return res.json({
+              ...ytFallback,
+              videoQuotaExceeded: formatted.code === 429,
+              switchToMode: "auto",
+            });
+          }
+
+          console.log("VIDEO UNAVAILABLE — falling back to normal chat");
         }
-
-        console.log("VIDEO UNAVAILABLE — falling back to normal chat");
       }
     }
 
@@ -1285,6 +1300,7 @@ export const chatWithAI = async (req, res) => {
       success: true,
       content,
       mediaType: "text",
+      ...(isVideoQuotaBlocked() ? { switchToMode: "auto", videoQuotaExceeded: true } : {}),
     });
     } catch (error) {
       const formatted = formatAiError(error);

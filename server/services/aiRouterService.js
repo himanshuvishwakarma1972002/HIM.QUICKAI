@@ -1,5 +1,5 @@
 import { createChatCompletion, parseJsonFromAi } from "../utils/geminiClient.js";
-import { detectHeuristicIntent, correctRoutedIntents } from "../utils/intentHeuristics.js";
+import { detectHeuristicIntent, correctRoutedIntents, wantsVideoGeneration, wantsImageGeneration, looksLikeChatQuestion } from "../utils/intentHeuristics.js";
 
 const VALID_INTENTS = new Set([
   "chat",
@@ -79,11 +79,15 @@ export const routeUserIntent = async ({
   }
 
   if (mode === "image") {
-    return [{ intent: "image_generation", query: text, language: "en", filters: {} }];
+    if (!looksLikeChatQuestion(text) || wantsImageGeneration(text.toLowerCase())) {
+      return [{ intent: "image_generation", query: text, language: "en", filters: {} }];
+    }
   }
 
   if (mode === "video") {
-    return [{ intent: "video_generation", query: text, language: "en", filters: {} }];
+    if (!looksLikeChatQuestion(text) || wantsVideoGeneration(text.toLowerCase())) {
+      return [{ intent: "video_generation", query: text, language: "en", filters: {} }];
+    }
   }
 
   if (mode === "chat") {
