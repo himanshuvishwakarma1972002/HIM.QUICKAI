@@ -6,8 +6,11 @@ import { clerkMiddleware } from '@clerk/express';
 import aiRouter from './routes/aiRoutes.js';
 import userRouter from './routes/userRoutes.js';
 import connectCloudinary from './configs/cloudinary.js';
+import { validateEnv } from './configs/env.js';
 
 const app = express();
+
+validateEnv();
 
 // ✅ Connect Cloudinary
 await connectCloudinary();

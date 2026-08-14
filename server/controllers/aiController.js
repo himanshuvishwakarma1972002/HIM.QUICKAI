@@ -8,40 +8,23 @@ import { extractResumeText } from "../utils/resumeText.js";
 import { clerkClient } from "@clerk/express";
 import OpenAI from "openai";
 import { GoogleGenAI } from "@google/genai";
+import { createChatCompletion } from "../utils/geminiClient.js";
+import { routeUserIntent } from "../services/aiRouterService.js";
+import { searchMovies } from "../services/movieSearchService.js";
+import { searchYouTube } from "../services/youtubeSearchService.js";
+import { searchWeb } from "../services/webSearchService.js";
+import { summarizeSearchResults } from "../services/searchSummaryService.js";
+import { isVisualGenerationPrompt } from "../utils/intentHeuristics.js";
 
 
 const AI = new OpenAI({
     apiKey: process.env.GEMINI_API_KEY,
     baseURL: "https://generativelanguage.googleapis.com/v1beta/openai",
 });
-const GEMINI_MODEL = (process.env.GEMINI_MODEL || "gemini-2.0-flash").replace(/"/g, "").trim();
 const IMAGE_MODEL = (process.env.GEMINI_IMAGE_MODEL || "gemini-2.5-flash-image").replace(/"/g, "").trim();
 const VIDEO_MODEL = (process.env.GEMINI_VIDEO_MODEL || "veo-3.1-fast-generate-preview").replace(/"/g, "").trim();
-const FALLBACK_MODELS = [...new Set([
-  GEMINI_MODEL,
-  "gemini-2.0-flash",
-  "gemini-1.5-flash-002",
-  "gemini-1.5-pro",
-])];
 
 const genAI = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-
-const createChatCompletion = async (messages, maxTokens) => {
-  let lastError;
-  for (const model of FALLBACK_MODELS) {
-    try {
-      return await AI.chat.completions.create({
-        model,
-        messages,
-        temperature: 0.7,
-        max_tokens: maxTokens,
-      });
-    } catch (error) {
-      lastError = error;
-    }
-  }
-  throw lastError;
-};
 
 const buildResumeFallbackReview = (resumeText) => {
   const text = (resumeText || "").toLowerCase();
@@ -969,6 +952,129 @@ const generateChatVideo = async (prompt, userId) => {
   return videoUrl;
 };
 
+const executeSearchIntents = async (searchIntents, userQuery, language) => {
+  const movieResults = [];
+  const youtubeResults = [];
+  const webResults = [];
+  const errors = [];
+
+  await Promise.all(
+    searchIntents.map(async (item) => {
+      if (item.intent === "movie_search") {
+        const result = await searchMovies(item.query || userQuery, item.language || language);
+        if (result.success) movieResults.push(...result.results);
+        else if (result.message) errors.push(result.message);
+      } else if (item.intent === "youtube_search") {
+        const result = await searchYouTube(item.query || userQuery);
+        if (result.success) youtubeResults.push(...result.results);
+        else if (result.message) errors.push(result.message);
+      } else if (item.intent === "web_search") {
+        const result = await searchWeb(item.query || userQuery);
+        if (result.success) webResults.push(...result.results);
+        else if (result.message) errors.push(result.message);
+      }
+    })
+  );
+
+  // Auto-fetch YouTube trailers when movies are found but no YouTube results yet
+  if (
+    movieResults.length &&
+    !youtubeResults.length &&
+    searchIntents.some((i) => i.intent === "movie_search")
+  ) {
+    const trailerQuery = `${userQuery.replace(/\bmoview\b/gi, "movie")} official trailer`;
+    const trailerResult = await searchYouTube(trailerQuery);
+    if (trailerResult.success && trailerResult.results?.length) {
+      youtubeResults.push(...trailerResult.results);
+    }
+  }
+
+  const totalFound = movieResults.length + youtubeResults.length + webResults.length;
+
+  if (!totalFound && errors.length) {
+    return {
+      success: false,
+      type: "search",
+      message: errors[0],
+    };
+  }
+
+  const answer = await summarizeSearchResults({
+    userQuery,
+    language,
+    movies: movieResults,
+    youtube: youtubeResults,
+    web: webResults,
+  });
+
+  const searchTypes = [...new Set(searchIntents.map((i) => i.intent))];
+  const hasMovies = movieResults.length > 0;
+  const hasYoutube = youtubeResults.length > 0;
+  const hasWeb = webResults.length > 0;
+  const typeCount = [hasMovies, hasYoutube, hasWeb].filter(Boolean).length;
+  const isCombined = typeCount > 1;
+
+  let searchType = "web";
+  if (isCombined) searchType = "combined";
+  else if (hasMovies) searchType = "movies";
+  else if (hasYoutube) searchType = "youtube";
+
+  const response = {
+    success: true,
+    type: "search",
+    searchType,
+    query: userQuery,
+    content: answer,
+    answer,
+    mediaType: "text",
+  };
+
+  if (isCombined) {
+    response.movieResults = movieResults;
+    response.youtubeResults = youtubeResults;
+    response.webResults = webResults;
+  } else if (searchType === "movies") {
+    response.results = movieResults;
+  } else if (searchType === "youtube") {
+    response.results = youtubeResults;
+  } else {
+    response.results = webResults;
+  }
+
+  return response;
+};
+
+const buildYouTubeVideoFallback = async (query, userQuery, language, reason) => {
+  const searchQuery = query.trim() || userQuery.trim();
+  if (!searchQuery) return null;
+
+  const ytResult = await searchYouTube(searchQuery);
+  if (!ytResult.success || !ytResult.results?.length) return null;
+
+  const summary = await summarizeSearchResults({
+    userQuery: userQuery || searchQuery,
+    language,
+    youtube: ytResult.results,
+  });
+
+  const reasonNote =
+    reason?.includes("quota") || reason?.includes("429")
+      ? "AI video generation quota is exceeded"
+      : "AI video generation is unavailable";
+
+  return {
+    success: true,
+    type: "search",
+    searchType: "youtube",
+    query: userQuery || searchQuery,
+    content: `**${reasonNote}** — here are related videos you can watch on YouTube:\n\n${summary}`,
+    answer: summary,
+    results: ytResult.results,
+    mediaType: "text",
+    warning: reason,
+  };
+};
+
 export const chatWithAI = async (req, res) => {
   try {
     const { userId } = req.auth();
@@ -992,11 +1098,39 @@ export const chatWithAI = async (req, res) => {
 
     const lastUserText =
       [...messages].reverse().find((m) => m?.role === "user")?.content || "";
-    const intent = detectMediaIntent(lastUserText, forcedMode);
-    const generationPrompt = extractGenerationPrompt(lastUserText);
+
+    const routedIntents = await routeUserIntent({
+      userText: lastUserText,
+      hasFiles: files.length > 0,
+      forcedMode,
+    });
+
+    const hasSearchIntent = routedIntents.some((i) =>
+      ["web_search", "movie_search", "youtube_search"].includes(i.intent)
+    );
+    const imageIntent = routedIntents.find((i) => i.intent === "image_generation");
+    const videoIntent = routedIntents.find((i) => i.intent === "video_generation");
+    const language = routedIntents[0]?.language || "en";
+
+    const generationPrompt = extractGenerationPrompt(
+      imageIntent?.query || videoIntent?.query || lastUserText
+    );
+
+    // ===== SEARCH (web / movies / YouTube) =====
+    if (hasSearchIntent && forcedMode !== "image" && forcedMode !== "video") {
+      const searchIntents = routedIntents.filter((i) =>
+        ["web_search", "movie_search", "youtube_search"].includes(i.intent)
+      );
+      const searchResponse = await executeSearchIntents(
+        searchIntents,
+        lastUserText,
+        language
+      );
+      return res.json(searchResponse);
+    }
 
     // ===== IMAGE GENERATION =====
-    if (intent === "image") {
+    if (imageIntent && forcedMode !== "search") {
       if (!generationPrompt) {
         return res.json({
           success: false,
@@ -1024,7 +1158,7 @@ export const chatWithAI = async (req, res) => {
     }
 
     // ===== VIDEO GENERATION =====
-    if (intent === "video") {
+    if (videoIntent && forcedMode !== "search") {
       if (!generationPrompt) {
         return res.json({
           success: false,
@@ -1045,13 +1179,24 @@ export const chatWithAI = async (req, res) => {
         const formatted = formatAiError(videoError);
         console.log("VIDEO ERROR:", formatted.message);
 
-        // Quota / access issues → try an image so the user still gets something useful
-        if (formatted.code === 429 || formatted.code === 403) {
+        // YouTube links fallback — always try so user gets watchable videos
+        const ytFallback = await buildYouTubeVideoFallback(
+          generationPrompt,
+          lastUserText,
+          language,
+          formatted.message
+        );
+        if (ytFallback) {
+          return res.json(ytFallback);
+        }
+
+        // Last resort: image fallback for visual-only prompts
+        if ((formatted.code === 429 || formatted.code === 403) && isVisualGenerationPrompt(generationPrompt)) {
           try {
             const imageUrl = await generateChatImage(generationPrompt, userId);
             return res.json({
               success: true,
-              content: `Video generation is unavailable right now (**${formatted.code === 429 ? "API quota exceeded" : "model access denied"}**).\n\nI created an **image** from your prompt instead:\n\n**${generationPrompt}**\n\n_Tip: check [Gemini rate limits](https://ai.google.dev/gemini-api/docs/rate-limits) or try again later for video._`,
+              content: `Video generation is unavailable right now (**${formatted.code === 429 ? "API quota exceeded" : "model access denied"}**).\n\nNo related YouTube videos were found. I created an **image** from your prompt instead:\n\n**${generationPrompt}**\n\n_Tip: check [Gemini rate limits](https://ai.google.dev/gemini-api/docs/rate-limits) or try again later for video._`,
               mediaType: "image",
               mediaUrl: imageUrl,
               warning: formatted.message,
@@ -1063,7 +1208,7 @@ export const chatWithAI = async (req, res) => {
 
         return res.json({
           success: false,
-          message: formatted.message,
+          message: `${formatted.message} No related YouTube videos were found either. Try **Search** mode or a different prompt.`,
         });
       }
     }

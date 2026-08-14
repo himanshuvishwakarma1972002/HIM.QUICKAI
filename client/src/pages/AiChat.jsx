@@ -14,6 +14,9 @@ import {
   Video,
   MessageSquare,
   Download,
+  Search,
+  Pause,
+  Pencil,
 } from 'lucide-react'
 import axios from 'axios'
 import toast from 'react-hot-toast'
@@ -21,6 +24,9 @@ import { useAuth } from '@clerk/react'
 import { getClerkAuthToken } from '../utils/auth'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import MovieResultCard from '../components/MovieResultCard'
+import YouTubeResultCard from '../components/YouTubeResultCard'
+import WebResultCard from '../components/WebResultCard'
 
 axios.defaults.baseURL = import.meta.env.VITE_BASE_URL
 
@@ -28,11 +34,162 @@ const MAX_FILES = 5
 const MAX_FILE_SIZE_MB = 10
 
 const MODES = [
-  { id: 'auto', label: 'Auto', icon: Sparkles, hint: 'Detects chat / image / video' },
+  { id: 'auto', label: 'Auto', icon: Sparkles, hint: 'Detects chat / search / image / video' },
   { id: 'chat', label: 'Chat', icon: MessageSquare, hint: 'Text answers only' },
+  { id: 'search', label: 'Search', icon: Search, hint: 'Web, movies, or YouTube search' },
   { id: 'image', label: 'Image', icon: ImageIcon, hint: 'Force image generation' },
   { id: 'video', label: 'Video', icon: Video, hint: 'Force video generation' },
 ]
+
+const getLoadingLabel = (mode) => {
+  if (mode === 'video') return 'Generating video (this can take 1–3 min)…'
+  if (mode === 'image') return 'Generating image…'
+  if (mode === 'search') return 'Searching…'
+  return 'Thinking…'
+}
+
+const buildAssistantMessage = (data) => {
+  if (data.type === 'search') {
+    if (!data.success) {
+      return {
+        role: 'assistant',
+        content: data.message || 'Search failed. Please try again.',
+        mediaType: 'text',
+        isError: true,
+      }
+    }
+
+    return {
+      role: 'assistant',
+      content: data.content || data.answer || '',
+      type: 'search',
+      searchType: data.searchType || 'web',
+      results: data.results || [],
+      movieResults: data.movieResults || [],
+      youtubeResults: data.youtubeResults || [],
+      webResults: data.webResults || [],
+      mediaType: 'text',
+    }
+  }
+
+  return {
+    role: 'assistant',
+    content: data.content,
+    mediaType: data.mediaType || 'text',
+    mediaUrl: data.mediaUrl || null,
+  }
+}
+
+const SearchResultsBlock = ({ msg }) => {
+  const movies =
+    msg.searchType === 'combined' || msg.movieResults?.length
+      ? msg.movieResults?.length
+        ? msg.movieResults
+        : msg.searchType === 'movies'
+          ? msg.results
+          : []
+      : msg.searchType === 'movies'
+        ? msg.results
+        : []
+  const youtube =
+    msg.searchType === 'combined' || msg.youtubeResults?.length
+      ? msg.youtubeResults?.length
+        ? msg.youtubeResults
+        : msg.searchType === 'youtube'
+          ? msg.results
+          : []
+      : msg.searchType === 'youtube'
+        ? msg.results
+        : []
+  const web =
+    msg.searchType === 'combined'
+      ? msg.webResults
+      : msg.searchType === 'web'
+        ? msg.results
+        : []
+
+  const hasMovies = movies?.length > 0
+  const hasYoutube = youtube?.length > 0
+  const hasWeb = web?.length > 0
+
+  if (!hasMovies && !hasYoutube && !hasWeb) {
+    return (
+      <p className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-500">
+        No results found for this search.
+      </p>
+    )
+  }
+
+  return (
+    <div className="space-y-4">
+      {hasMovies && (
+        <div className="space-y-2">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Movies & TV</p>
+          <div className="grid gap-2">
+            {movies.map((item, idx) => (
+              <MovieResultCard key={item.id || `movie-${idx}`} item={item} />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {hasYoutube && (
+        <div className="space-y-2">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">YouTube</p>
+          <div className="grid gap-2">
+            {youtube.map((item, idx) => (
+              <YouTubeResultCard key={item.videoId || `yt-${idx}`} item={item} />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {hasWeb && (
+        <div className="space-y-2">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Web results</p>
+          <div className="grid gap-2">
+            {web.map((item, idx) => (
+              <WebResultCard key={item.url || `web-${idx}`} item={item} />
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+const WebSources = ({ msg }) => {
+  const sources =
+    msg.searchType === 'combined'
+      ? msg.webResults
+      : msg.searchType === 'web'
+        ? msg.results
+        : []
+
+  if (!sources?.length) return null
+
+  return (
+    <div className="mt-3 rounded-lg border border-slate-100 bg-slate-50/80 px-3 py-2">
+      <p className="mb-1.5 text-xs font-semibold text-slate-600">Sources</p>
+      <ul className="space-y-1">
+        {sources.map((item, idx) =>
+          item.url ? (
+            <li key={item.url || idx}>
+              <a
+                href={item.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs text-violet-600 underline underline-offset-2 hover:text-violet-800"
+              >
+                {item.title || item.source || item.url}
+              </a>
+            </li>
+          ) : null
+        )}
+      </ul>
+    </div>
+  )
+}
 
 const getFileMeta = (file) => {
   const type = file.type || ''
@@ -78,11 +235,13 @@ const AiChat = () => {
   const [copiedIndex, setCopiedIndex] = useState(null)
   const [dragActive, setDragActive] = useState(false)
   const [attachments, setAttachments] = useState([])
+  const [editingMessageIndex, setEditingMessageIndex] = useState(null)
 
   const bottomRef = useRef(null)
   const inputRef = useRef(null)
   const textareaRef = useRef(null)
   const fileInputRef = useRef(null)
+  const abortControllerRef = useRef(null)
 
   const { getToken, isSignedIn } = useAuth()
 
@@ -171,11 +330,41 @@ const AiChat = () => {
   const applySuggestion = (text, nextMode = 'auto') => {
     setMode(nextMode)
     setInput(text)
+    setEditingMessageIndex(null)
     inputRef.current?.focus()
   }
 
+  const getLastUserMessageIndex = (list) => {
+    for (let i = list.length - 1; i >= 0; i -= 1) {
+      if (list[i].role === 'user') return i
+    }
+    return -1
+  }
+
+  const pauseGeneration = () => {
+    abortControllerRef.current?.abort()
+    abortControllerRef.current = null
+    setLoading(false)
+    toast('Response paused')
+  }
+
+  const editMessage = (index) => {
+    const msg = messages[index]
+    if (!msg || msg.role !== 'user') return
+
+    if (loading) pauseGeneration()
+
+    const text = msg.content === 'Attached files' ? '' : msg.content
+    setInput(text)
+    setMessages((prev) => prev.slice(0, index))
+    setAttachments([])
+    setEditingMessageIndex(index)
+    inputRef.current?.focus()
+    toast('Message loaded — edit and send again')
+  }
+
   const sendMessage = async (e) => {
-    e.preventDefault()
+    e?.preventDefault?.()
     if ((!input.trim() && attachments.length === 0) || loading) return
 
     if (!isSignedIn) {
@@ -183,36 +372,38 @@ const AiChat = () => {
     }
 
     setLoading(true)
+    setEditingMessageIndex(null)
 
     const userText = input.trim()
     const currentAttachments = [...attachments]
+    const historyForRequest = [...messages, { role: 'user', content: userText }]
+
+    const userMessage = {
+      role: 'user',
+      content: userText || 'Attached files',
+      files: currentAttachments.map((file) => ({
+        name: file.name,
+        type: file.type,
+      })),
+    }
+
+    setMessages((prev) => [...prev, userMessage])
+    setInput('')
+    setAttachments([])
+
+    const controller = new AbortController()
+    abortControllerRef.current = controller
 
     try {
       const token = await getClerkAuthToken(getToken)
 
       const formData = new FormData()
-      formData.append(
-        'messages',
-        JSON.stringify([...messages, { role: 'user', content: userText }])
-      )
+      formData.append('messages', JSON.stringify(historyForRequest))
       formData.append('mode', mode)
 
       currentAttachments.forEach((file) => {
         formData.append('files', file)
       })
-
-      const userMessage = {
-        role: 'user',
-        content: userText || 'Attached files',
-        files: currentAttachments.map((file) => ({
-          name: file.name,
-          type: file.type,
-        })),
-      }
-
-      setMessages((prev) => [...prev, userMessage])
-      setInput('')
-      setAttachments([])
 
       const timeout = mode === 'video' || /video|clip|reel|animation/i.test(userText)
         ? 360000
@@ -223,18 +414,11 @@ const AiChat = () => {
           Authorization: `Bearer ${token}`,
         },
         timeout,
+        signal: controller.signal,
       })
 
       if (data.success) {
-        setMessages((prev) => [
-          ...prev,
-          {
-            role: 'assistant',
-            content: data.content,
-            mediaType: data.mediaType || 'text',
-            mediaUrl: data.mediaUrl || null,
-          },
-        ])
+        setMessages((prev) => [...prev, buildAssistantMessage(data)])
         if (data.warning) {
           toast(data.warning, {
             icon: '⚠️',
@@ -258,6 +442,10 @@ const AiChat = () => {
         ])
       }
     } catch (error) {
+      if (error.code === 'ERR_CANCELED' || error.name === 'CanceledError') {
+        return
+      }
+
       const raw =
         error.code === 'ECONNABORTED'
           ? 'Request timed out. Video generation can take a few minutes — try again.'
@@ -278,6 +466,7 @@ const AiChat = () => {
         },
       ])
     } finally {
+      abortControllerRef.current = null
       setLoading(false)
     }
   }
@@ -300,7 +489,9 @@ const AiChat = () => {
       ? 'Describe the image to generate...'
       : mode === 'video'
         ? 'Describe the video scene to generate...'
-        : 'Ask anything, or say “generate an image of…” / “create a video of…”'
+        : mode === 'search'
+          ? 'Search the web, movies, or YouTube...'
+          : 'Ask anything — chat, search, generate images/videos, or upload files'
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-gradient-to-br from-slate-50 via-white to-violet-50 text-slate-800">
@@ -314,7 +505,7 @@ const AiChat = () => {
               <div className="min-w-0">
                 <h1 className="truncate text-base font-semibold sm:text-lg">AI Studio Chat</h1>
                 <p className="text-xs text-slate-500 sm:text-sm">
-                  Chat · generate images · generate videos · upload docs
+                  Chat · search · generate images · generate videos · upload docs
                 </p>
               </div>
             </div>
@@ -363,6 +554,18 @@ const AiChat = () => {
                     <button
                       type="button"
                       onClick={() =>
+                        applySuggestion('What is the latest React.js news?', 'search')
+                      }
+                      className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-left text-sm text-slate-700 shadow-sm transition hover:border-violet-300 hover:bg-violet-50"
+                    >
+                      <span className="mb-1 flex items-center gap-2 font-medium text-violet-700">
+                        <Search className="h-4 w-4" /> Search
+                      </span>
+                      What is the latest React.js news?
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
                         applySuggestion('Generate an image of a futuristic city at sunset', 'image')
                       }
                       className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-left text-sm text-slate-700 shadow-sm transition hover:border-violet-300 hover:bg-violet-50"
@@ -391,7 +594,12 @@ const AiChat = () => {
                 </div>
               )}
 
-              {messages.map((msg, i) => (
+              {messages.map((msg, i) => {
+                const lastUserIndex = getLastUserMessageIndex(messages)
+                const canEditUser =
+                  msg.role === 'user' && (!loading || i === lastUserIndex)
+
+                return (
                 <div
                   key={i}
                   className={`flex items-end gap-2 sm:gap-3 ${
@@ -465,7 +673,7 @@ const AiChat = () => {
                               <a
                                 href={href}
                                 target="_blank"
-                                rel="noreferrer"
+                                rel="noopener noreferrer"
                                 className="text-violet-600 underline underline-offset-2"
                               >
                                 {children}
@@ -488,6 +696,15 @@ const AiChat = () => {
                             .replace(/```(\w+)?/g, '\n```$1\n')
                             .replace(/\n{3,}/g, '\n\n')}
                         </ReactMarkdown>
+
+                        {msg.type === 'search' && (
+                          <>
+                            <SearchResultsBlock msg={msg} />
+                            {(msg.searchType === 'web' || msg.searchType === 'combined') && (
+                              <WebSources msg={msg} />
+                            )}
+                          </>
+                        )}
 
                         <button
                           type="button"
@@ -527,6 +744,18 @@ const AiChat = () => {
                             })}
                           </div>
                         ) : null}
+                        {canEditUser && (
+                          <div className="mt-2 flex justify-end gap-1.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100">
+                            <button
+                              type="button"
+                              onClick={() => editMessage(i)}
+                              className="inline-flex items-center gap-1 rounded-lg bg-white/15 px-2 py-1 text-[11px] text-white ring-1 ring-white/25 transition hover:bg-white/25"
+                            >
+                              <Pencil className="h-3 w-3" />
+                              Edit
+                            </button>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
@@ -537,26 +766,30 @@ const AiChat = () => {
                     </div>
                   )}
                 </div>
-              ))}
+              )})}
 
               {loading && (
                 <div className="flex items-center gap-2 text-sm text-slate-500">
                   <div className="flex h-9 w-9 items-center justify-center rounded-2xl bg-violet-100 text-violet-600">
                     <Bot className="h-5 w-5" />
                   </div>
-                  <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+                  <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
                     <span className="inline-flex items-center gap-2">
                       <span className="inline-flex items-center gap-1.5">
                         <span className="h-2 w-2 animate-bounce rounded-full bg-violet-500 [animation-delay:-0.2s]" />
                         <span className="h-2 w-2 animate-bounce rounded-full bg-violet-500 [animation-delay:-0.1s]" />
                         <span className="h-2 w-2 animate-bounce rounded-full bg-violet-500" />
                       </span>
-                      {mode === 'video'
-                        ? 'Generating video (this can take 1–3 min)…'
-                        : mode === 'image'
-                          ? 'Generating image…'
-                          : 'Thinking…'}
+                      {getLoadingLabel(mode)}
                     </span>
+                    <button
+                      type="button"
+                      onClick={pauseGeneration}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-800 transition hover:bg-amber-100"
+                    >
+                      <Pause className="h-3.5 w-3.5" />
+                      Pause
+                    </button>
                   </div>
                 </div>
               )}
@@ -604,6 +837,22 @@ const AiChat = () => {
               </div>
             )}
 
+            {editingMessageIndex !== null && (
+              <div className="mb-2 flex items-center justify-between gap-2 rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 text-xs text-violet-800">
+                <span className="inline-flex items-center gap-1.5">
+                  <Pencil className="h-3.5 w-3.5" />
+                  Editing message — change text below and press Enter to resend
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setEditingMessageIndex(null)}
+                  className="rounded-lg px-2 py-0.5 text-violet-600 hover:bg-violet-100"
+                >
+                  Cancel
+                </button>
+              </div>
+            )}
+
             <div className="flex items-end gap-2 sm:gap-3">
               <input
                 ref={fileInputRef}
@@ -645,18 +894,29 @@ const AiChat = () => {
                 className="max-h-56 min-h-[44px] flex-1 resize-none rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-violet-500 focus:ring-2 focus:ring-violet-200 sm:text-base"
               />
 
-              <button
-                type="submit"
-                disabled={loading || (!input.trim() && attachments.length === 0)}
-                className="flex h-11 w-11 items-center justify-center rounded-xl bg-violet-600 text-white transition hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-50 sm:h-12 sm:w-12"
-              >
-                <Send className="h-5 w-5" />
-              </button>
+              {loading ? (
+                <button
+                  type="button"
+                  onClick={pauseGeneration}
+                  title="Pause response"
+                  className="flex h-11 w-11 items-center justify-center rounded-xl bg-amber-500 text-white transition hover:bg-amber-600 sm:h-12 sm:w-12"
+                >
+                  <Pause className="h-5 w-5" />
+                </button>
+              ) : (
+                <button
+                  type="submit"
+                  disabled={!input.trim() && attachments.length === 0}
+                  className="flex h-11 w-11 items-center justify-center rounded-xl bg-violet-600 text-white transition hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-50 sm:h-12 sm:w-12"
+                >
+                  <Send className="h-5 w-5" />
+                </button>
+              )}
             </div>
 
             <div className="mt-2 flex flex-wrap items-center justify-between gap-2 px-1 text-[11px] text-slate-400">
               <span>
-                Mode: <span className="font-medium text-slate-600">{mode}</span> · PDF/DOC/TXT/images · Gemini image · Veo video
+                Mode: <span className="font-medium text-slate-600">{mode}</span> · Auto routes chat/search/image/video · PDF/DOC/TXT/images
               </span>
               <span>{attachments.length}/{MAX_FILES} files</span>
             </div>
