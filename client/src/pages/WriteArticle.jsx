@@ -4,6 +4,7 @@ import axios from 'axios'
 import toast from 'react-hot-toast'
 import { useAuth } from '@clerk/react'
 import CreationItem from '../components/CreationItem'
+import { getClerkAuthToken } from '../utils/auth'
 
 axios.defaults.baseURL = import.meta.env.VITE_BASE_URL;
 
@@ -32,10 +33,11 @@ const WriteArticle = () => {
       const selectedText = articleLength.find(item => item.length === selectedLength)?.text
       const prompt = `Write an article about ${input} in ${selectedText}`
 
+      const token = await getClerkAuthToken(getToken)
       const { data } = await axios.post(
         '/api/ai/generate-article',
         { prompt, length: selectedLength },
-        { headers: { Authorization: `Bearer ${await getToken()}` } }
+        { headers: { Authorization: `Bearer ${token}` } }
       )
 
       if (data.success) {

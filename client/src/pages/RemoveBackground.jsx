@@ -3,6 +3,7 @@ import { EraserIcon, Sparkles, UploadCloud, X, Download, Copy } from 'lucide-rea
 import axios from 'axios'
 import toast from 'react-hot-toast'
 import { useAuth } from '@clerk/react'
+import { getClerkAuthToken } from '../utils/auth'
 
 axios.defaults.baseURL = import.meta.env.VITE_BASE_URL;
 
@@ -27,12 +28,13 @@ const RemoveBackground = () => {
       const formData = new FormData()
       formData.append('image', image)
 
+      const token = await getClerkAuthToken(getToken)
       const { data } = await axios.post(
         '/api/ai/remove-image-background',
         formData,
         {
           headers: {
-            Authorization: `Bearer ${await getToken()}`,
+            Authorization: `Bearer ${token}`,
             'Content-Type': 'multipart/form-data'
           }
         }

@@ -3,6 +3,7 @@ import React, { useState } from 'react'
 import axios from 'axios'
 import toast from 'react-hot-toast'
 import { useAuth } from '@clerk/react'
+import { getClerkAuthToken } from '../utils/auth'
 
 axios.defaults.baseURL = import.meta.env.VITE_BASE_URL;
 
@@ -29,12 +30,13 @@ const RemoveObject = () => {
       formData.append('image', image)
       formData.append('object', objectText)
 
+      const token = await getClerkAuthToken(getToken)
       const { data } = await axios.post(
         '/api/ai/remove-image-object',
         formData,
         {
           headers: {
-            Authorization: `Bearer ${await getToken()}`,
+            Authorization: `Bearer ${token}`,
             'Content-Type': 'multipart/form-data'
           }
         }

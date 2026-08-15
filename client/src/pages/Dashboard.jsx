@@ -15,6 +15,7 @@ import CreationItem from '../components/CreationItem'
 import { useUser, useAuth } from '@clerk/react'
 import axios from 'axios'
 import toast from 'react-hot-toast'
+import { getClerkAuthToken } from '../utils/auth'
 import { AiToolsData } from '../assets/assets'
 
 axios.defaults.baseURL = import.meta.env.VITE_BASE_URL
@@ -83,9 +84,9 @@ const Dashboard = () => {
     else setLoading(true)
 
     try {
-      const token = await getToken()
+      const token = await getClerkAuthToken(getToken)
       const { data } = await axios.get('/api/user/get-user-creations', {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        headers: { Authorization: `Bearer ${token}` },
       })
       if (data.success) {
         setCreations(data.creations || [])

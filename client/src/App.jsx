@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react'
+import React from 'react'
 import { Routes, Route } from 'react-router-dom'
 import Home from './pages/Home.jsx'
 import Layout from './pages/Layout'
@@ -12,27 +12,8 @@ import ReviewResime from './pages/ReviewResime'
 import Commnity from './pages/Commnity'
 import AiChat from './pages/AiChat.jsx'
 import { Toaster } from 'react-hot-toast'
-import { useAuth } from '@clerk/react'
 
 const App = () => {
-  const { isLoaded, isSignedIn, getToken } = useAuth()
-  const tokenLoggedRef = useRef(false)
-
-  useEffect(() => {
-    if (!isLoaded || !isSignedIn || tokenLoggedRef.current) return
-
-    tokenLoggedRef.current = true
-    getToken()
-      .then((token) => {
-        if (token) {
-          console.log('[Clerk] Session token:', token)
-        }
-      })
-      .catch((err) => {
-        console.error('[Clerk] Failed to get token:', err?.message || err)
-      })
-  }, [isLoaded, isSignedIn])
-
   return (
     <div>
       <Toaster
@@ -72,8 +53,6 @@ const App = () => {
           <Route path='remove-object' element={<RemoveObject />} />
           <Route path='review-resume' element={<ReviewResime />} />
           <Route path='community' element={<Commnity />} />
-
-          {/* ✅ GPT / AI CHAT PAGE */}
           <Route path='gpt' element={<AiChat />} />
         </Route>
       </Routes>

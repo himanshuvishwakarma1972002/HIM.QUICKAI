@@ -3,6 +3,7 @@ import { ImageIcon, Sparkles, Download, Copy } from 'lucide-react'
 import axios from 'axios'
 import toast from 'react-hot-toast'
 import { useAuth } from '@clerk/react'
+import { getClerkAuthToken } from '../utils/auth'
 
 axios.defaults.baseURL = import.meta.env.VITE_BASE_URL;
 
@@ -28,10 +29,11 @@ const GenerateImages = () => {
     try {
       setLoading(true)
       const prompt = `Generate an image of ${input} in the style ${selectedCategory}.`
+      const token = await getClerkAuthToken(getToken)
       const { data } = await axios.post(
         '/api/ai/generate-image',
         { prompt, publish: isPublic },
-        { headers: { Authorization: `Bearer ${await getToken()}` } }
+        { headers: { Authorization: `Bearer ${token}` } }
       )
       if (data.success) {
         setImageUrl(data.content)

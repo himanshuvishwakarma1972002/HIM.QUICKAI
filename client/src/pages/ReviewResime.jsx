@@ -15,6 +15,7 @@ import axios from 'axios'
 import toast from 'react-hot-toast'
 import { useAuth } from '@clerk/react'
 import Markdown from 'react-markdown'
+import { getClerkAuthToken } from '../utils/auth'
 
 axios.defaults.baseURL = import.meta.env.VITE_BASE_URL
 
@@ -126,7 +127,7 @@ const ReviewResume = () => {
       if (jobDescription.trim()) formData.append('jobDescription', jobDescription.trim())
       if (profileInfo.trim()) formData.append('profileInfo', profileInfo.trim())
 
-      const token = await getToken()
+      const token = await getClerkAuthToken(getToken)
 
       const { data } = await axios.post('/api/ai/resume-review', formData, {
         headers: { Authorization: `Bearer ${token}` },

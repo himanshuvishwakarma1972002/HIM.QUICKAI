@@ -13,7 +13,12 @@ if (!publishableKey) throw new Error('Missing VITE_CLERK_PUBLISHABLE_KEY')
 
 createRoot(rootEl).render(
   <StrictMode>
-    <ClerkProvider publishableKey={publishableKey}>
+    <ClerkProvider
+      publishableKey={publishableKey}
+      afterSignOutUrl="/"
+      signInFallbackRedirectUrl="/#/ai"
+      signUpFallbackRedirectUrl="/#/ai"
+    >
       <HashRouter>
         <App />
       </HashRouter>

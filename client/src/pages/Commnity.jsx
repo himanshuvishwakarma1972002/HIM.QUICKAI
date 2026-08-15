@@ -3,6 +3,7 @@ import React, { useEffect, useState } from 'react'
 import { useUser, useAuth } from '@clerk/react'
 import axios from 'axios'
 import toast from 'react-hot-toast'
+import { getClerkAuthToken } from '../utils/auth'
 
 axios.defaults.baseURL = import.meta.env.VITE_BASE_URL
 
@@ -50,7 +51,7 @@ const Community = () => {
         })
       )
 
-      const token = await getToken()
+      const token = await getClerkAuthToken(getToken)
       const { data } = await axios.post(
         '/api/user/toggle-like-creations',
         { id: creationId },
@@ -120,7 +121,7 @@ const Community = () => {
     setDetailsData(null)
 
     try {
-      const token = await getToken()
+      const token = await getClerkAuthToken(getToken)
       const { data } = await axios.get(
         `/api/user/get-creation-likes/${creation.id}`,
         { headers: { Authorization: `Bearer ${token}` } }
