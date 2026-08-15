@@ -8,7 +8,7 @@ import { SignIn, useUser } from '@clerk/react'
 const Layout = () => {
   const navigate = useNavigate()
   const [sidebar, setSidebar] = useState(false)
-  const { user } = useUser()
+  const { user, isLoaded } = useUser()
 
   useEffect(() => {
     const closeOnResize = () => {
@@ -25,10 +25,25 @@ const Layout = () => {
     }
   }, [sidebar])
 
-  return user ? (
-    <div className="flex flex-col h-screen bg-[#F4F7FB] overflow-hidden">
+  // Wait for Clerk before deciding signed-in vs SignIn (avoids broken session/token)
+  if (!isLoaded) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-[#F4F7FB] text-gray-500 text-sm">
+        Loading…
+      </div>
+    )
+  }
 
-      {/* Top navbar — fixed height for sidebar alignment */}
+  if (!user) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <SignIn forceRedirectUrl="/ai" fallbackRedirectUrl="/ai" />
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex flex-col h-screen bg-[#F4F7FB] overflow-hidden">
       <nav className="relative z-50 flex h-14 shrink-0 items-center justify-between px-4 bg-white border-b border-gray-200">
         <img
           src={assets.logo}
@@ -47,10 +62,7 @@ const Layout = () => {
         </button>
       </nav>
 
-      {/* Main area */}
       <div className="relative flex flex-1 min-h-0 w-full">
-
-        {/* Mobile backdrop */}
         {sidebar && (
           <button
             type="button"
@@ -62,15 +74,10 @@ const Layout = () => {
 
         <Sidebar sidebar={sidebar} setSidebar={setSidebar} />
 
-        {/* Page content — full width on mobile */}
         <main className="flex-1 min-w-0 w-full overflow-y-auto overflow-x-hidden bg-[#F4F7FB]">
           <Outlet />
         </main>
       </div>
-    </div>
-  ) : (
-    <div className="flex items-center justify-center h-screen">
-      <SignIn />
     </div>
   )
 }

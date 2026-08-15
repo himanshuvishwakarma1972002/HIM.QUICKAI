@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useEffect, useRef } from 'react'
 import { Routes, Route } from 'react-router-dom'
 import Home from './pages/Home.jsx'
 import Layout from './pages/Layout'
@@ -12,8 +12,35 @@ import ReviewResime from './pages/ReviewResime'
 import Commnity from './pages/Commnity'
 import AiChat from './pages/AiChat.jsx'
 import { Toaster } from 'react-hot-toast'
+import { useAuth } from '@clerk/react'
 
 const App = () => {
+  const { isLoaded, isSignedIn, getToken } = useAuth()
+  const loggedRef = useRef(false)
+
+  useEffect(() => {
+    if (!isLoaded || loggedRef.current) return
+
+    if (!isSignedIn) {
+      console.log('[Clerk] Not signed in — no token yet. Sign in first.')
+      return
+    }
+
+    loggedRef.current = true
+    getToken({ skipCache: true })
+      .then((token) => {
+        if (token) {
+          console.log('[Clerk] Token generated ✅')
+          console.log('Bearer', token)
+        } else {
+          console.warn('[Clerk] Signed in but getToken() returned null')
+        }
+      })
+      .catch((err) => {
+        console.error('[Clerk] getToken failed:', err?.message || err)
+      })
+  }, [isLoaded, isSignedIn, getToken])
+
   return (
     <div>
       <Toaster
