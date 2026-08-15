@@ -26,8 +26,8 @@ const genAI = new GoogleGenAI({
   apiKey: process.env.GEMINI_API_KEY,
 });
 
-const IMAGE_MODEL = (process.env.GEMINI_IMAGE_MODEL || "gemini-2.5-flash-image").replace(/"/g, "").trim();
-const VIDEO_MODEL = (process.env.GEMINI_VIDEO_MODEL || "veo-3.1-fast-generate-preview").replace(/"/g, "").trim();
+const IMAGE_MODEL = (process.env.GEMINI_IMAGE_MODEL || "gemini-3-flash-image").replace(/"/g, "").trim();
+const VIDEO_MODEL = (process.env.GEMINI_VIDEO_MODEL || "veo-3-fast-generate-preview").replace(/"/g, "").trim();
 
 const VIDEO_QUOTA_COOLDOWN_MS = 30 * 60 * 1000;
 let videoQuotaBlockedUntil = 0;
