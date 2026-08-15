@@ -1,12 +1,10 @@
 import React, { useMemo, useState } from 'react'
 import { Edit, Sparkles } from 'lucide-react'
-import axios from 'axios'
+import axios from '../utils/api'
 import toast from 'react-hot-toast'
 import { useAuth } from '@clerk/react'
 import CreationItem from '../components/CreationItem'
 import { getClerkAuthToken } from '../utils/auth'
-
-axios.defaults.baseURL = import.meta.env.VITE_BASE_URL;
 
 const WriteArticle = () => {
 

@@ -13,12 +13,10 @@ import {
 import { Link } from 'react-router-dom'
 import CreationItem from '../components/CreationItem'
 import { useUser, useAuth } from '@clerk/react'
-import axios from 'axios'
+import axios from '../utils/api'
 import toast from 'react-hot-toast'
 import { getClerkAuthToken } from '../utils/auth'
 import { AiToolsData } from '../assets/assets'
-
-axios.defaults.baseURL = import.meta.env.VITE_BASE_URL
 
 const TYPE_FILTERS = [
   { id: 'all', label: 'All' },

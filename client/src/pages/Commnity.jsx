@@ -1,11 +1,9 @@
 import { Download, Heart, Info, Mail, User, X } from 'lucide-react'
 import React, { useEffect, useState } from 'react'
 import { useUser, useAuth } from '@clerk/react'
-import axios from 'axios'
+import axios from '../utils/api'
 import toast from 'react-hot-toast'
 import { getClerkAuthToken } from '../utils/auth'
-
-axios.defaults.baseURL = import.meta.env.VITE_BASE_URL
 
 const Community = () => {
   const [creations, setCreations] = useState([])

@@ -11,13 +11,11 @@ import {
   X,
 } from 'lucide-react'
 import React, { useState } from 'react'
-import axios from 'axios'
+import axios from '../utils/api'
 import toast from 'react-hot-toast'
 import { useAuth } from '@clerk/react'
 import Markdown from 'react-markdown'
 import { getClerkAuthToken } from '../utils/auth'
-
-axios.defaults.baseURL = import.meta.env.VITE_BASE_URL
 
 const ACCEPTED_RESUME_TYPES = new Set([
   'application/pdf',

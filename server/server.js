@@ -91,6 +91,14 @@ const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`🚀 Server running on http://localhost:${PORT}`);
   console.log(`🔐 Clerk authorized parties: ${frontendOrigins.join(', ')}`);
+  try {
+    const pk = process.env.CLERK_PUBLISHABLE_KEY || '';
+    const raw = pk.split('_').slice(2).join('_');
+    const fapi = Buffer.from(raw, 'base64').toString('utf8').replace(/\$$/, '');
+    console.log(`🔑 Clerk FAPI (must match client token iss): ${fapi}`);
+  } catch {
+    /* ignore */
+  }
 });
 
 export default app;

@@ -18,7 +18,7 @@ import {
   Pause,
   Pencil,
 } from 'lucide-react'
-import axios from 'axios'
+import axios from '../utils/api'
 import toast from 'react-hot-toast'
 import { useAuth } from '@clerk/react'
 import { getClerkAuthToken } from '../utils/auth'
@@ -27,8 +27,6 @@ import remarkGfm from 'remark-gfm'
 import MovieResultCard from '../components/MovieResultCard'
 import YouTubeResultCard from '../components/YouTubeResultCard'
 import WebResultCard from '../components/WebResultCard'
-
-axios.defaults.baseURL = import.meta.env.VITE_BASE_URL
 
 const MAX_FILES = 5
 const MAX_FILE_SIZE_MB = 10
