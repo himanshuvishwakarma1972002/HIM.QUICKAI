@@ -21,6 +21,11 @@ const AI = new OpenAI({
     apiKey: process.env.GEMINI_API_KEY,
     baseURL: "https://generativelanguage.googleapis.com/v1beta/openai",
 });
+
+const genAI = new GoogleGenAI({
+  apiKey: process.env.GEMINI_API_KEY,
+});
+
 const IMAGE_MODEL = (process.env.GEMINI_IMAGE_MODEL || "gemini-2.5-flash-image").replace(/"/g, "").trim();
 const VIDEO_MODEL = (process.env.GEMINI_VIDEO_MODEL || "veo-3.1-fast-generate-preview").replace(/"/g, "").trim();
 
@@ -1189,46 +1194,73 @@ export const chatWithAI = async (req, res) => {
     // ===== VIDEO GENERATION =====
     if (videoIntent && forcedMode !== "search") {
       if (isVideoQuotaBlocked()) {
-        console.log("VIDEO SKIPPED — quota cooldown active, using chat");
-      } else if (!generationPrompt) {
+        const ytFallback = await buildYouTubeVideoFallback(
+          generationPrompt,
+          lastUserText,
+          language,
+          "AI video generation quota is temporarily exceeded"
+        );
+        if (ytFallback) {
+          return res.json({
+            ...ytFallback,
+            videoQuotaExceeded: true,
+            switchToMode: "auto",
+          });
+        }
+        return res.json({
+          success: false,
+          message:
+            "AI video generation quota is exceeded right now. Please wait and try again, or switch to Image / Chat mode.",
+          videoQuotaExceeded: true,
+          switchToMode: "auto",
+        });
+      }
+
+      if (!generationPrompt) {
         return res.json({
           success: false,
           message: "Please describe the video you want to generate",
         });
-      } else {
-        try {
-          const videoUrl = await generateChatVideo(generationPrompt, userId);
+      }
 
-          return res.json({
-            success: true,
-            content: `Here's the video I generated for: **${generationPrompt}**\n\n_Note: Video generation can take up to a couple of minutes._`,
-            mediaType: "video",
-            mediaUrl: videoUrl,
-          });
-        } catch (videoError) {
-          const formatted = formatAiError(videoError);
-          console.log("VIDEO ERROR:", formatted.message);
+      try {
+        const videoUrl = await generateChatVideo(generationPrompt, userId);
 
-          if (formatted.code === 429) {
-            markVideoQuotaBlocked();
-          }
+        return res.json({
+          success: true,
+          content: `Here's the video I generated for: **${generationPrompt}**\n\n_Note: Video generation can take up to a couple of minutes._`,
+          mediaType: "video",
+          mediaUrl: videoUrl,
+        });
+      } catch (videoError) {
+        const formatted = formatAiError(videoError);
+        console.log("VIDEO ERROR:", formatted.message);
 
-          const ytFallback = await buildYouTubeVideoFallback(
-            generationPrompt,
-            lastUserText,
-            language,
-            formatted.message
-          );
-          if (ytFallback) {
-            return res.json({
-              ...ytFallback,
-              videoQuotaExceeded: formatted.code === 429,
-              switchToMode: "auto",
-            });
-          }
-
-          console.log("VIDEO UNAVAILABLE — falling back to normal chat");
+        if (formatted.code === 429) {
+          markVideoQuotaBlocked();
         }
+
+        const ytFallback = await buildYouTubeVideoFallback(
+          generationPrompt,
+          lastUserText,
+          language,
+          formatted.message
+        );
+        if (ytFallback) {
+          return res.json({
+            ...ytFallback,
+            videoQuotaExceeded: formatted.code === 429,
+            switchToMode: formatted.code === 429 ? "auto" : undefined,
+          });
+        }
+
+        // Do NOT fall through to chat — that produces fake tool-call JSON text
+        return res.json({
+          success: false,
+          message: formatted.message,
+          videoQuotaExceeded: formatted.code === 429,
+          ...(formatted.code === 429 ? { switchToMode: "auto" } : {}),
+        });
       }
     }
 
@@ -1280,9 +1312,10 @@ export const chatWithAI = async (req, res) => {
       content: `You are Him.AI — a multimodal assistant like Gemini.
 - Answer clearly with markdown when helpful
 - When files are attached, use their content
-- Users can also ask you to generate images or videos (handled separately by the system)
+- Image and video generation are handled by the system — never invent tool calls, JSON actions, or fake media URLs
+- Never output formats like {"action":"..."} or dalle/tool JSON
 - Be concise, accurate, and helpful
-- Do not claim you generated a video unless a video file was actually created`,
+- Do not claim you generated a video or image unless a real media file was created`,
     };
 
     const finalMessages = [systemPrompt, ...history];
@@ -1290,6 +1323,15 @@ export const chatWithAI = async (req, res) => {
 
     let content =
       response?.choices?.[0]?.message?.content || "No response";
+
+    // Reject hallucinated tool-call / action JSON (seen when video/image path fails)
+    if (
+      /"action"\s*:/.test(content) ||
+      /dalle\.|text2im|generateVideos|action_input/i.test(content)
+    ) {
+      content =
+        "I couldn't run that media tool from chat. Please use **Video** or **Image** mode and try again.";
+    }
 
     content = content
       .replace(/```(\w+)/g, "\n```$1\n")
