@@ -56,37 +56,52 @@ export const summarizeSearchResults = async ({
     return `I couldn't find any results for "${userQuery}". Try rephrasing your search or check back later.`;
   }
 
+  const quickFallback = () => {
+    const bits = [];
+    if (movies.length) bits.push(`${movies.length} movie/TV result(s)`);
+    if (youtube.length) bits.push(`${youtube.length} YouTube video(s)`);
+    if (web.length) bits.push(`${web.length} web result(s)`);
+    return `Here are ${bits.join(", ")} for **${userQuery}**.`;
+  };
+
   const langInstruction =
     language && language !== "en"
       ? `Respond in the same language as the user's query (language code: ${language}).`
       : "Respond in the same language as the user's query.";
 
   try {
-    const response = await createChatCompletion(
-      [
-        {
-          role: "system",
-          content: `You are a helpful AI assistant summarizing search results.
+    const response = await Promise.race([
+      createChatCompletion(
+        [
+          {
+            role: "system",
+            content: `You are a helpful AI assistant summarizing search results.
 ${langInstruction}
 Be concise, helpful, and mention key findings. Use markdown when helpful.
 Do NOT invent URLs, movie titles, or video links — only reference items from the provided results.`,
-        },
-        {
-          role: "user",
-          content: `User query: "${userQuery}"
+          },
+          {
+            role: "user",
+            content: `User query: "${userQuery}"
 
 Search results:
 ${context}
 
 Write a helpful summary introducing these results.`,
-        },
-      ],
-      1200
-    );
+          },
+        ],
+        600
+      ),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("Search summary timed out")), 12_000)
+      ),
+    ]);
 
-    return response?.choices?.[0]?.message?.content || "Here are the search results I found.";
+    return (
+      response?.choices?.[0]?.message?.content?.trim() || quickFallback()
+    );
   } catch (error) {
     console.error("SEARCH SUMMARY ERROR:", error.message);
-    return "Here are the search results I found for your query.";
+    return quickFallback();
   }
 };

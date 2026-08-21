@@ -422,9 +422,14 @@ const AiChat = () => {
 
       if (data.success) {
         setMessages((prev) => [...prev, buildAssistantMessage(data)])
-        if (data.switchToMode === 'auto' || data.videoQuotaExceeded) {
-          setMode('auto')
+        // Only warn when this request was actually a video attempt (or server
+        // forced a mode switch after a video quota failure).
+        const wasVideoAttempt = mode === 'video' || data.type === 'search'
+        if (data.videoQuotaExceeded && wasVideoAttempt) {
+          if (data.switchToMode === 'auto') setMode('auto')
           toast('Video generation quota exceeded — switched to Auto chat')
+        } else if (data.switchToMode === 'auto' && mode === 'video') {
+          setMode('auto')
         } else if (data.warning) {
           toast(data.warning, {
             icon: '⚠️',
@@ -458,9 +463,13 @@ const AiChat = () => {
           : error.response?.data?.message || error.message || 'Server error'
 
       const errText =
-        typeof raw === 'string' && (/quota|429|RESOURCE_EXHAUSTED/i.test(raw) || raw.length > 220)
-          ? 'Gemini API quota exceeded for video. Try again later, or switch to **Image** mode.'
-          : raw
+        typeof raw === 'string' && raw.length > 220
+          ? 'Generation failed due to API limits. Try again later, or switch mode.'
+          : typeof raw === 'string' &&
+              /quota|429|RESOURCE_EXHAUSTED/i.test(raw) &&
+              mode === 'video'
+            ? 'Gemini API quota exceeded for video. Try again later, or switch to Image / Chat mode.'
+            : raw
 
       setMessages((prev) => [
         ...prev,

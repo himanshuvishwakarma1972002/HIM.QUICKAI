@@ -1,9 +1,12 @@
 # dependencies
 node_modules/
 
-# environment variables (IMPORTANT)
+# environment variables (IMPORTANT) — never commit real secrets / local URLs
 .env
 .env.*
+!.env.example
+!**/.env.example
+client/.env
 server/.env
 
 # build files

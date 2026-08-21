@@ -17,6 +17,7 @@ import { summarizeSearchResults } from "../services/searchSummaryService.js";
 import { isExplicitVideoRequest, isExplicitImageRequest } from "../utils/intentHeuristics.js";
 
 
+
 const AI = new OpenAI({
     apiKey: process.env.GEMINI_API_KEY,
     baseURL: "https://generativelanguage.googleapis.com/v1beta/openai",
@@ -1068,11 +1069,25 @@ const buildYouTubeVideoFallback = async (query, userQuery, language, reason) => 
   const ytResult = await searchYouTube(searchQuery);
   if (!ytResult.success || !ytResult.results?.length) return null;
 
-  const summary = await summarizeSearchResults({
-    userQuery: userQuery || searchQuery,
-    language,
-    youtube: ytResult.results,
-  });
+  // Prefer a fast local blurb; AI summary is best-effort with a short timeout.
+  const top = ytResult.results.slice(0, 5);
+  const list = top
+    .map((v, i) => `${i + 1}. **${v.title}** — ${v.channel || "YouTube"}`)
+    .join("\n");
+
+  let summary = list;
+  try {
+    summary = await Promise.race([
+      summarizeSearchResults({
+        userQuery: userQuery || searchQuery,
+        language,
+        youtube: ytResult.results,
+      }),
+      new Promise((resolve) => setTimeout(() => resolve(list), 4000)),
+    ]);
+  } catch {
+    summary = list;
+  }
 
   const reasonNote =
     reason?.includes("quota") || reason?.includes("429")
@@ -1338,11 +1353,12 @@ export const chatWithAI = async (req, res) => {
       .replace(/```/g, "\n```")
       .replace(/\n{3,}/g, "\n\n");
 
+    // Do not attach videoQuotaExceeded here — that flag is video-only and was
+    // incorrectly surfacing as "quota exceeded" on normal chat replies.
     res.json({
       success: true,
       content,
       mediaType: "text",
-      ...(isVideoQuotaBlocked() ? { switchToMode: "auto", videoQuotaExceeded: true } : {}),
     });
     } catch (error) {
       const formatted = formatAiError(error);
@@ -1352,7 +1368,7 @@ export const chatWithAI = async (req, res) => {
         success: false,
         message:
           formatted.code === 403
-            ? "Chat model is unavailable on this server API key. Set GEMINI_MODEL to gemini-2.5-flash or gemini-2.0-flash in production and redeploy."
+            ? "Chat model is unavailable on this server API key. Set GEMINI_MODEL to gemini-flash-lite-latest or gemini-3-flash-preview and restart the server."
             : formatted.message,
       });
     }
