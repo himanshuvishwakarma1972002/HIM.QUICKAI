@@ -28,6 +28,15 @@ export const validateEnv = () => {
   }
 
   console.log('✅ Environment variables validated');
+  const geminiKey = (process.env.GEMINI_API_KEY || '')
+    .replace(/^["']|["']$/g, '')
+    .trim();
+  console.log(
+    `🔑 Gemini key loaded: ${geminiKey ? `…${geminiKey.slice(-4)} (${geminiKey.length} chars)` : 'MISSING'}`
+  );
+  console.log(
+    `🤖 GEMINI_MODEL=${(process.env.GEMINI_MODEL || 'gemini-flash-lite-latest').replace(/"/g, '').trim()}`
+  );
 };
 
 export const hasEnv = (key) => Boolean(process.env[key]?.trim());

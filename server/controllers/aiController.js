@@ -18,17 +18,21 @@ import { isExplicitVideoRequest, isExplicitImageRequest } from "../utils/intentH
 
 
 
+const IMAGE_MODEL = (process.env.GEMINI_IMAGE_MODEL || "gemini-3-flash-preview").replace(/"/g, "").trim();
+const VIDEO_MODEL = (process.env.GEMINI_VIDEO_MODEL || "veo-3.1-fast-generate-preview").replace(/"/g, "").trim();
+
+const geminiApiKey = (process.env.GEMINI_API_KEY || "")
+  .replace(/^["']|["']$/g, "")
+  .trim();
+
 const AI = new OpenAI({
-    apiKey: process.env.GEMINI_API_KEY,
+    apiKey: geminiApiKey,
     baseURL: "https://generativelanguage.googleapis.com/v1beta/openai",
 });
 
 const genAI = new GoogleGenAI({
-  apiKey: process.env.GEMINI_API_KEY,
+  apiKey: geminiApiKey,
 });
-
-const IMAGE_MODEL = (process.env.GEMINI_IMAGE_MODEL || "gemini-2.5-flash-image").replace(/"/g, "").trim();
-const VIDEO_MODEL = (process.env.GEMINI_VIDEO_MODEL || "veo-3.1-fast-generate-preview").replace(/"/g, "").trim();
 
 const VIDEO_QUOTA_COOLDOWN_MS = 30 * 60 * 1000;
 let videoQuotaBlockedUntil = 0;
@@ -853,15 +857,14 @@ const formatAiError = (error) => {
   const code =
     parsed?.error?.code ||
     error?.status ||
-    error?.code ||
-    error?.response?.status;
+    error?.response?.status ||
+    (typeof error?.code === "number" ? error.code : null);
   const msg = parsed?.error?.message || String(raw);
+  const blob = `${msg} ${raw}`;
 
   if (
     code === 429 ||
-    /RESOURCE_EXHAUSTED|exceeded your current quota|rate.?limit/i.test(
-      `${msg} ${raw}`
-    )
+    /RESOURCE_EXHAUSTED|exceeded your current quota|rate.?limit/i.test(blob)
   ) {
     return {
       code: 429,
@@ -870,13 +873,30 @@ const formatAiError = (error) => {
     };
   }
 
-  if (code === 403 || /PERMISSION_DENIED|not enabled|access/i.test(msg)) {
-    const isVeo = /veo|video|generateVideos/i.test(`${msg} ${raw}`);
+  // 401 = bad/missing key on the host (very common on Render when env is wrong)
+  if (
+    code === 401 ||
+    /UNAUTHENTICATED|invalid.?api.?key|API[_ ]?key not valid|incorrect api key/i.test(
+      blob
+    )
+  ) {
+    return {
+      code: 401,
+      message:
+        "Gemini API key was rejected (401). On Render → Environment, set GEMINI_API_KEY to a valid key from AI Studio (no quotes), then redeploy.",
+    };
+  }
+
+  if (
+    code === 403 ||
+    /PERMISSION_DENIED|not enabled|FAILED_PRECONDITION/i.test(blob)
+  ) {
+    const isVeo = /veo|video|generateVideos/i.test(blob);
     return {
       code: 403,
       message: isVeo
         ? "AI video generation is not available on this Gemini API key. Use Chat or Image mode instead."
-        : "This Gemini model is not available for the current API key. Check GEMINI_MODEL in the server environment, or try again shortly.",
+        : "This Gemini model is not available for the current API key. On Render set GEMINI_MODEL=gemini-flash-lite-latest (and GEMINI_IMAGE_MODEL=gemini-3-flash-preview), then redeploy.",
     };
   }
 
@@ -933,8 +953,8 @@ const generateChatVideo = async (prompt, userId) => {
 
   if (videoMeta.uri) {
     const downloadUrl = videoMeta.uri.includes("?")
-      ? `${videoMeta.uri}&key=${process.env.GEMINI_API_KEY}`
-      : `${videoMeta.uri}?key=${process.env.GEMINI_API_KEY}`;
+      ? `${videoMeta.uri}&key=${geminiApiKey}`
+      : `${videoMeta.uri}?key=${geminiApiKey}`;
 
     const videoRes = await axios.get(downloadUrl, {
       responseType: "arraybuffer",
@@ -1367,9 +1387,11 @@ export const chatWithAI = async (req, res) => {
       res.json({
         success: false,
         message:
-          formatted.code === 403
-            ? "Chat model is unavailable on this server API key. Set GEMINI_MODEL to gemini-flash-lite-latest or gemini-3-flash-preview and restart the server."
-            : formatted.message,
+          formatted.code === 401
+            ? formatted.message
+            : formatted.code === 403
+              ? "Chat model is unavailable on this server API key. On Render set GEMINI_MODEL=gemini-flash-lite-latest and confirm GEMINI_API_KEY, then redeploy."
+              : formatted.message,
       });
     }
 };

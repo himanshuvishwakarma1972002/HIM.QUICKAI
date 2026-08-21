@@ -25,14 +25,35 @@ const TYPE_FILTERS = [
   { id: 'image', label: 'Images' },
 ]
 
-const StatCard = ({ title, value, subtitle, icon: Icon, gradient, delay = 0 }) => (
-  <motion.div
-    initial={{ opacity: 0, y: 16 }}
-    animate={{ opacity: 1, y: 0 }}
-    transition={{ delay, duration: 0.4 }}
-    whileHover={{ y: -4, transition: { duration: 0.2 } }}
-    className="flex justify-between items-center min-w-0 w-full flex-1 p-4 sm:p-5 bg-white rounded-2xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow"
-  >
+const CACHE_TTL_MS = 60_000
+
+const cacheKeyFor = (userId) => `quickai:dashboard:${userId}`
+
+const readCache = (userId) => {
+  try {
+    const raw = sessionStorage.getItem(cacheKeyFor(userId))
+    if (!raw) return null
+    const parsed = JSON.parse(raw)
+    if (!parsed?.savedAt || Date.now() - parsed.savedAt > CACHE_TTL_MS) return null
+    return Array.isArray(parsed.creations) ? parsed.creations : null
+  } catch {
+    return null
+  }
+}
+
+const writeCache = (userId, creations) => {
+  try {
+    sessionStorage.setItem(
+      cacheKeyFor(userId),
+      JSON.stringify({ savedAt: Date.now(), creations })
+    )
+  } catch {
+    /* ignore quota */
+  }
+}
+
+const StatCard = ({ title, value, subtitle, icon: Icon, gradient }) => (
+  <div className="flex justify-between items-center min-w-0 w-full flex-1 p-4 sm:p-5 bg-white rounded-2xl border border-gray-200 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200">
     <div className="text-slate-600">
       <p className="text-sm text-gray-500">{title}</p>
       <h2 className="text-2xl font-bold text-slate-800 mt-1">{value}</h2>
@@ -44,22 +65,14 @@ const StatCard = ({ title, value, subtitle, icon: Icon, gradient, delay = 0 }) =
     >
       <Icon className="w-5 h-5" />
     </div>
-  </motion.div>
+  </div>
 )
 
-const DashboardSkeleton = () => (
-  <div className="space-y-6 animate-pulse">
-    <div className="h-24 bg-gray-200 rounded-2xl" />
-    <div className="grid sm:grid-cols-2 xl:grid-cols-4 gap-4">
-      {[1, 2, 3, 4].map((i) => (
-        <div key={i} className="h-28 bg-gray-200 rounded-2xl" />
-      ))}
-    </div>
-    <div className="space-y-3">
-      {[1, 2, 3].map((i) => (
-        <div key={i} className="h-20 bg-gray-200 rounded-xl" />
-      ))}
-    </div>
+const ListSkeleton = () => (
+  <div className="space-y-3 animate-pulse">
+    {[1, 2, 3].map((i) => (
+      <div key={i} className="h-20 bg-gray-200 rounded-xl" />
+    ))}
   </div>
 )
 
@@ -76,6 +89,7 @@ const Dashboard = () => {
 
   const getDashboardData = useCallback(async ({ isRefresh = false } = {}) => {
     if (isFetchingRef.current) return
+    if (!user?.id) return
 
     isFetchingRef.current = true
     if (isRefresh) setRefreshing(true)
@@ -85,10 +99,14 @@ const Dashboard = () => {
       const token = await getClerkAuthToken(getToken)
       const { data } = await axios.get('/api/user/get-user-creations', {
         headers: { Authorization: `Bearer ${token}` },
+        params: { limit: 40 },
+        timeout: 30000,
       })
       if (data.success) {
-        setCreations(data.creations || [])
-        lastFetchedUserIdRef.current = user?.id ?? null
+        const next = data.creations || []
+        setCreations(next)
+        writeCache(user.id, next)
+        lastFetchedUserIdRef.current = user.id
       } else {
         toast.error(data.message)
       }
@@ -109,13 +127,22 @@ const Dashboard = () => {
 
   useEffect(() => {
     if (!isLoaded || !user?.id) return
-    if (lastFetchedUserIdRef.current === user.id) return
 
+    const cached = readCache(user.id)
+    if (cached) {
+      setCreations(cached)
+      setLoading(false)
+      lastFetchedUserIdRef.current = user.id
+      // Soft refresh in background if cache is present
+      getDashboardData({ isRefresh: true })
+      return
+    }
+
+    if (lastFetchedUserIdRef.current === user.id) return
     getDashboardData()
   }, [isLoaded, user?.id])
 
   const userPlan = user?.publicMetadata?.plan?.toLowerCase() || 'free'
-  const firstName = user?.firstName || user?.username || 'Creator'
 
   const stats = useMemo(() => {
     const byType = creations.reduce((acc, item) => {
@@ -139,8 +166,7 @@ const Dashboard = () => {
       const matchesSearch =
         !query ||
         item.prompt?.toLowerCase().includes(query) ||
-        item.type?.toLowerCase().includes(query) ||
-        item.content?.toLowerCase().includes(query)
+        item.type?.toLowerCase().includes(query)
       return matchesType && matchesSearch
     })
   }, [creations, search, typeFilter])
@@ -150,187 +176,150 @@ const Dashboard = () => {
   return (
     <div className="min-h-full w-full p-3 sm:p-6 pb-8 bg-gradient-to-b from-gray-50 to-white">
       <div className="max-w-6xl mx-auto space-y-6 sm:space-y-8">
-        
+        {/* Stats + quick actions render immediately — list can still be loading */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4">
+          <StatCard
+            title="Total Creations"
+            value={loading && !creations.length ? '—' : creations.length}
+            subtitle="Recent (up to 40)"
+            icon={Sparkles}
+            gradient={{ from: '#3588F2', to: '#0BB0D7' }}
+          />
+          <StatCard
+            title="This Week"
+            value={loading && !creations.length ? '—' : stats.thisWeek}
+            subtitle="Last 7 days"
+            icon={Calendar}
+            gradient={{ from: '#20C363', to: '#11B97E' }}
+          />
+          <StatCard
+            title="Content Types"
+            value={loading && !creations.length ? '—' : Object.keys(stats.byType).length}
+            subtitle="Unique categories"
+            icon={Layers}
+            gradient={{ from: '#F76C1C', to: '#F04A3C' }}
+          />
+          <StatCard
+            title="Active Plan"
+            value={userPlan === 'premium' ? 'Premium' : 'Free'}
+            subtitle={userPlan === 'premium' ? 'Unlimited access' : 'Upgrade anytime'}
+            icon={Gem}
+            gradient={{ from: '#FF61C5', to: '#9E53EE' }}
+          />
+        </div>
 
-        {loading ? (
-          <DashboardSkeleton />
-        ) : (
-          <>
-            {/* Stats grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4">
-              <StatCard
-                title="Total Creations"
-                value={creations.length}
-                subtitle="All time"
-                icon={Sparkles}
-                gradient={{ from: '#3588F2', to: '#0BB0D7' }}
-                delay={0.1}
-              />
-              <StatCard
-                title="This Week"
-                value={stats.thisWeek}
-                subtitle="Last 7 days"
-                icon={Calendar}
-                gradient={{ from: '#20C363', to: '#11B97E' }}
-                delay={0.15}
-              />
-              <StatCard
-                title="Content Types"
-                value={Object.keys(stats.byType).length}
-                subtitle="Unique categories"
-                icon={Layers}
-                gradient={{ from: '#F76C1C', to: '#F04A3C' }}
-                delay={0.2}
-              />
-              <StatCard
-                title="Active Plan"
-                value={userPlan === 'premium' ? 'Premium' : 'Free'}
-                subtitle={userPlan === 'premium' ? 'Unlimited access' : 'Upgrade anytime'}
-                icon={Gem}
-                gradient={{ from: '#FF61C5', to: '#9E53EE' }}
-                delay={0.25}
-              />
-            </div>
+        <section>
+          <h2 className="text-lg font-semibold text-slate-800 mb-4">Quick Actions</h2>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+            {AiToolsData.map((tool) => (
+              <Link
+                key={tool.path}
+                to={tool.path}
+                className="flex flex-col items-center gap-2 p-4 bg-white rounded-xl border border-gray-200 hover:border-purple-300 hover:shadow-md transition-all group"
+              >
+                <div
+                  className="w-10 h-10 rounded-lg flex items-center justify-center text-white"
+                  style={{
+                    background: `linear-gradient(135deg, ${tool.bg.from}, ${tool.bg.to})`,
+                  }}
+                >
+                  <tool.Icon className="w-5 h-5" />
+                </div>
+                <span className="text-xs font-medium text-slate-600 text-center group-hover:text-purple-600 transition-colors line-clamp-2">
+                  {tool.title}
+                </span>
+              </Link>
+            ))}
+          </div>
+        </section>
 
-            {/* Quick actions */}
-            <motion.section
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.3 }}
-            >
-              <h2 className="text-lg font-semibold text-slate-800 mb-4">Quick Actions</h2>
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-                {AiToolsData.map((tool, i) => (
-                  <motion.div
-                    key={tool.path}
-                    initial={{ opacity: 0, scale: 0.95 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    transition={{ delay: 0.35 + i * 0.05 }}
-                    whileHover={{ scale: 1.03 }}
-                    whileTap={{ scale: 0.98 }}
+        <section>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
+            <h2 className="text-lg font-semibold text-slate-800">Recent Creations</h2>
+
+            <div className="flex flex-col sm:flex-row gap-3">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Search creations..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="pl-9 pr-4 py-2 text-sm border border-gray-200 rounded-lg w-full sm:w-56 focus:outline-none focus:ring-2 focus:ring-purple-500/30 focus:border-purple-400"
+                />
+              </div>
+
+              <div className="flex items-center gap-2 overflow-x-auto pb-1">
+                <Filter className="w-4 h-4 text-gray-400 shrink-0" />
+                {TYPE_FILTERS.map((f) => (
+                  <button
+                    key={f.id}
+                    onClick={() => setTypeFilter(f.id)}
+                    className={`px-3 py-1.5 text-xs font-medium rounded-full whitespace-nowrap transition-all ${
+                      typeFilter === f.id
+                        ? 'bg-purple-600 text-white shadow-sm'
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
                   >
-                    <Link
-                      to={tool.path}
-                      className="flex flex-col items-center gap-2 p-4 bg-white rounded-xl border border-gray-200 hover:border-purple-300 hover:shadow-md transition-all group"
-                    >
-                      <div
-                        className="w-10 h-10 rounded-lg flex items-center justify-center text-white"
-                        style={{
-                          background: `linear-gradient(135deg, ${tool.bg.from}, ${tool.bg.to})`,
-                        }}
-                      >
-                        <tool.Icon className="w-5 h-5" />
-                      </div>
-                      <span className="text-xs font-medium text-slate-600 text-center group-hover:text-purple-600 transition-colors line-clamp-2">
-                        {tool.title}
-                      </span>
-                    </Link>
-                  </motion.div>
+                    {f.label}
+                  </button>
                 ))}
               </div>
-            </motion.section>
+            </div>
+          </div>
 
-            {/* Creations section */}
-            <section>
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
-                <h2 className="text-lg font-semibold text-slate-800">Recent Creations</h2>
-
-                <div className="flex flex-col sm:flex-row gap-3">
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                    <input
-                      type="text"
-                      placeholder="Search creations..."
-                      value={search}
-                      onChange={(e) => setSearch(e.target.value)}
-                      className="pl-9 pr-4 py-2 text-sm border border-gray-200 rounded-lg w-full sm:w-56 focus:outline-none focus:ring-2 focus:ring-purple-500/30 focus:border-purple-400"
-                    />
+          {loading && creations.length === 0 ? (
+            <ListSkeleton />
+          ) : (
+            <AnimatePresence mode="popLayout">
+              {filteredCreations.length === 0 ? (
+                <motion.div
+                  key="empty"
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0 }}
+                  className="text-center py-16 px-6 bg-white rounded-2xl border border-dashed border-gray-300"
+                >
+                  <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-purple-50 flex items-center justify-center">
+                    <Sparkles className="w-8 h-8 text-purple-500" />
                   </div>
-
-                  <div className="flex items-center gap-2 overflow-x-auto pb-1">
-                    <Filter className="w-4 h-4 text-gray-400 shrink-0" />
-                    {TYPE_FILTERS.map((f) => (
-                      <button
-                        key={f.id}
-                        onClick={() => setTypeFilter(f.id)}
-                        className={`px-3 py-1.5 text-xs font-medium rounded-full whitespace-nowrap transition-all ${
-                          typeFilter === f.id
-                            ? 'bg-purple-600 text-white shadow-sm'
-                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                        }`}
-                      >
-                        {f.label}
-                      </button>
-                    ))}
-                  </div>
+                  <p className="text-slate-700 font-medium">
+                    {creations.length === 0 ? 'No creations yet' : 'No matches found'}
+                  </p>
+                  <p className="text-sm text-gray-400 mt-2 max-w-sm mx-auto">
+                    {creations.length === 0
+                      ? 'Start by using one of the AI tools above to create your first masterpiece.'
+                      : 'Try adjusting your search or filter.'}
+                  </p>
+                  {creations.length === 0 && (
+                    <Link
+                      to="/ai/write-article"
+                      className="inline-flex items-center gap-2 mt-6 px-5 py-2.5 bg-purple-600 text-white text-sm font-medium rounded-lg hover:bg-purple-700 transition-colors"
+                    >
+                      Create your first article
+                      <ArrowRight className="w-4 h-4" />
+                    </Link>
+                  )}
+                </motion.div>
+              ) : (
+                <div className="space-y-3">
+                  {filteredCreations.map((item) => (
+                    <CreationItem key={item.id} item={item} />
+                  ))}
                 </div>
-              </div>
+              )}
+            </AnimatePresence>
+          )}
+        </section>
 
-              <AnimatePresence mode="popLayout">
-                {filteredCreations.length === 0 ? (
-                  <motion.div
-                    key="empty"
-                    initial={{ opacity: 0, y: 8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0 }}
-                    className="text-center py-16 px-6 bg-white rounded-2xl border border-dashed border-gray-300"
-                  >
-                    <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-purple-50 flex items-center justify-center">
-                      <Sparkles className="w-8 h-8 text-purple-500" />
-                    </div>
-                    <p className="text-slate-700 font-medium">
-                      {creations.length === 0
-                        ? 'No creations yet'
-                        : 'No matches found'}
-                    </p>
-                    <p className="text-sm text-gray-400 mt-2 max-w-sm mx-auto">
-                      {creations.length === 0
-                        ? 'Start by using one of the AI tools above to create your first masterpiece.'
-                        : 'Try adjusting your search or filter.'}
-                    </p>
-                    {creations.length === 0 && (
-                      <Link
-                        to="/ai/write-article"
-                        className="inline-flex items-center gap-2 mt-6 px-5 py-2.5 bg-purple-600 text-white text-sm font-medium rounded-lg hover:bg-purple-700 transition-colors"
-                      >
-                        Create your first article
-                        <ArrowRight className="w-4 h-4" />
-                      </Link>
-                    )}
-                  </motion.div>
-                ) : (
-                  <motion.div layout className="space-y-3">
-                    {filteredCreations.map((item, index) => (
-                        <motion.div
-                          key={item.id}
-                          layout
-                          initial={{ opacity: 0, x: -12 }}
-                          animate={{ opacity: 1, x: 0 }}
-                          exit={{ opacity: 0, x: 12 }}
-                          transition={{ delay: index * 0.03 }}
-                        >
-                          <CreationItem item={item} />
-                        </motion.div>
-                    ))}
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </section>
-          </>
-        )}
-
-        {!loading && (
-          <motion.button
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            onClick={() => getDashboardData({ isRefresh: true })}
-            disabled={refreshing}
-            className="flex items-center gap-2 mx-auto text-sm text-gray-500 hover:text-purple-600 transition-colors disabled:opacity-50"
-          >
-            <Loader2 className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
-            {refreshing ? 'Refreshing...' : 'Refresh dashboard'}
-          </motion.button>
-        )}
+        <button
+          onClick={() => getDashboardData({ isRefresh: true })}
+          disabled={refreshing}
+          className="flex items-center gap-2 mx-auto text-sm text-gray-500 hover:text-purple-600 transition-colors disabled:opacity-50"
+        >
+          <Loader2 className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+          {refreshing ? 'Refreshing...' : 'Refresh dashboard'}
+        </button>
       </div>
     </div>
   )

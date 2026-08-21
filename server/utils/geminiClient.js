@@ -1,7 +1,11 @@
 import OpenAI from "openai";
 
+const geminiApiKey = (process.env.GEMINI_API_KEY || "")
+  .replace(/^["']|["']$/g, "")
+  .trim();
+
 const AI = new OpenAI({
-  apiKey: process.env.GEMINI_API_KEY,
+  apiKey: geminiApiKey,
   baseURL: "https://generativelanguage.googleapis.com/v1beta/openai",
   timeout: 20_000,
   maxRetries: 0,
@@ -29,9 +33,8 @@ let preferredModel = null;
 
 const getStatus = (error) =>
   error?.status ||
-  error?.code ||
   error?.response?.status ||
-  error?.error?.code ||
+  (typeof error?.code === "number" ? error.code : null) ||
   null;
 
 const isNotFound = (error) => {

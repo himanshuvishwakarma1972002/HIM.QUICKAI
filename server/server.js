@@ -52,12 +52,20 @@ app.get('/', (req, res) => {
 
 // Safe deploy check (no secrets) — confirms Clerk keys are loaded on Render
 app.get('/api/health', (req, res) => {
+  const geminiKey = (process.env.GEMINI_API_KEY || '')
+    .replace(/^["']|["']$/g, '')
+    .trim();
   res.json({
     ok: true,
     clerk: Boolean(
       process.env.CLERK_SECRET_KEY?.trim() &&
         process.env.CLERK_PUBLISHABLE_KEY?.trim()
     ),
+    gemini: Boolean(geminiKey),
+    geminiKeySuffix: geminiKey ? geminiKey.slice(-4) : null,
+    geminiModel: (process.env.GEMINI_MODEL || 'gemini-flash-lite-latest')
+      .replace(/"/g, '')
+      .trim(),
     authorizedParties: frontendOrigins,
   });
 });
